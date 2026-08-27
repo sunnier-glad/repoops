@@ -51,3 +51,70 @@ def test_github_client_maps_forbidden_response_to_domain_error():
 
     assert error.value.status_code == 403
     assert "not accessible" in str(error.value)
+
+
+def test_github_client_lists_quality_data_with_normalized_fields():
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/repos/octocat/demo/pulls":
+            return httpx.Response(
+                200,
+                json=[
+                    {
+                        "id": 11,
+                        "number": 3,
+                        "title": "Improve docs",
+                        "body": "Details",
+                        "state": "open",
+                        "user": {"login": "octocat"},
+                        "head": {"ref": "docs", "sha": "abc"},
+                        "html_url": "https://github.com/octocat/demo/pull/3",
+                    }
+                ],
+            )
+        if request.url.path == "/repos/octocat/demo/actions/runs":
+            return httpx.Response(
+                200,
+                json={
+                    "workflow_runs": [
+                        {
+                            "id": 21,
+                            "name": "CI",
+                            "status": "completed",
+                            "conclusion": "failure",
+                            "head_branch": "main",
+                            "head_sha": "def",
+                            "html_url": "https://github.com/octocat/demo/actions/runs/21",
+                        }
+                    ]
+                },
+            )
+        if request.url.path == "/repos/octocat/demo/releases":
+            return httpx.Response(
+                200,
+                json=[
+                    {
+                        "id": 31,
+                        "tag_name": "v1.0.0",
+                        "name": "First release",
+                        "body": "Notes",
+                        "published_at": "2026-08-27T10:00:00Z",
+                        "html_url": "https://github.com/octocat/demo/releases/tag/v1.0.0",
+                    }
+                ],
+            )
+        raise AssertionError(f"unexpected request: {request.method} {request.url}")
+
+    client = GitHubClient(
+        client_id="client-id",
+        client_secret="client-secret",
+        transport=httpx.MockTransport(handler),
+    )
+
+    pull_request = client.list_pull_requests("gho-token", "octocat/demo")[0]
+    workflow = client.list_workflow_runs("gho-token", "octocat/demo")[0]
+    release = client.list_releases("gho-token", "octocat/demo")[0]
+
+    assert pull_request.head_branch == "docs"
+    assert pull_request.author_login == "octocat"
+    assert workflow.conclusion == "failure"
+    assert release.published_at == "2026-08-27T10:00:00Z"

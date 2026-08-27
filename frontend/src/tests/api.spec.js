@@ -1,6 +1,15 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { bindRepository, getAvailableRepositories, request } from '../api/client'
+import {
+  bindRepository,
+  getAvailableRepositories,
+  getFailedWorkflows,
+  getPullRequests,
+  getReleases,
+  getBoundRepositories,
+  request,
+  syncRepository,
+} from '../api/client'
 
 describe('api client', () => {
   afterEach(() => vi.unstubAllGlobals())
@@ -42,5 +51,33 @@ describe('api client', () => {
       headers: expect.objectContaining({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ full_name: 'octocat/demo' }),
     }))
+  })
+
+  it('loads and syncs repository quality data', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ pull_requests: 1 }) })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => [{ number: 3 }] })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => [{ workflow_name: 'CI' }] })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => [{ tag_name: 'v1.0.0' }] })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(syncRepository(1)).resolves.toEqual({ pull_requests: 1 })
+    await expect(getPullRequests(1)).resolves.toEqual([{ number: 3 }])
+    await expect(getFailedWorkflows(1)).resolves.toEqual([{ workflow_name: 'CI' }])
+    await expect(getReleases(1)).resolves.toEqual([{ tag_name: 'v1.0.0' }])
+
+    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/repositories/1/sync', expect.objectContaining({ method: 'POST' }))
+  })
+
+  it('loads repositories already bound to the current account', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => [{ id: 1, full_name: 'octocat/demo' }],
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(getBoundRepositories()).resolves.toEqual([{ id: 1, full_name: 'octocat/demo' }])
+    expect(fetchMock).toHaveBeenCalledWith('/api/repositories', expect.objectContaining({ credentials: 'include' }))
   })
 })

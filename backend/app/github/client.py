@@ -3,7 +3,13 @@ from __future__ import annotations
 import httpx
 
 from app.auth.service import GitHubIdentity
-from app.github.schemas import GitHubRepository, WebhookInfo
+from app.github.schemas import (
+    GitHubPullRequest,
+    GitHubRelease,
+    GitHubRepository,
+    GitHubWorkflowRun,
+    WebhookInfo,
+)
 
 
 class GitHubApiError(RuntimeError):
@@ -69,6 +75,67 @@ class GitHubClient:
                 full_name=item["full_name"],
                 name=item["name"],
                 private=item["private"],
+            )
+            for item in response.json()
+        ]
+
+    def list_pull_requests(self, access_token: str, repository: str) -> list[GitHubPullRequest]:
+        response = self._send(
+            "GET",
+            f"{self.api_base_url}/repos/{repository}/pulls",
+            token=access_token,
+            params={"state": "all", "per_page": 100, "sort": "updated", "direction": "desc"},
+        )
+        return [
+            GitHubPullRequest(
+                github_id=item["id"],
+                number=item["number"],
+                title=item["title"],
+                body=item.get("body"),
+                state=item["state"],
+                head_branch=(item.get("head") or {}).get("ref"),
+                head_sha=(item.get("head") or {}).get("sha"),
+                author_login=(item.get("user") or {}).get("login"),
+                html_url=item.get("html_url"),
+            )
+            for item in response.json()
+        ]
+
+    def list_workflow_runs(self, access_token: str, repository: str) -> list[GitHubWorkflowRun]:
+        response = self._send(
+            "GET",
+            f"{self.api_base_url}/repos/{repository}/actions/runs",
+            token=access_token,
+            params={"per_page": 100},
+        )
+        return [
+            GitHubWorkflowRun(
+                github_id=item["id"],
+                workflow_name=item.get("name") or "未命名工作流",
+                status=item["status"],
+                conclusion=item.get("conclusion"),
+                branch=item.get("head_branch"),
+                commit_sha=item.get("head_sha"),
+                html_url=item.get("html_url"),
+            )
+            for item in response.json().get("workflow_runs", [])
+        ]
+
+    def list_releases(self, access_token: str, repository: str) -> list[GitHubRelease]:
+        response = self._send(
+            "GET",
+            f"{self.api_base_url}/repos/{repository}/releases",
+            token=access_token,
+            params={"per_page": 100},
+        )
+        return [
+            GitHubRelease(
+                github_id=item["id"],
+                tag_name=item["tag_name"],
+                name=item.get("name"),
+                body=item.get("body"),
+                published_at=item.get("published_at"),
+                html_url=item.get("html_url"),
             )
             for item in response.json()
         ]

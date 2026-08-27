@@ -7,6 +7,7 @@ from app.ci.service import list_failed_workflows
 from app.db.models import PullRequest, Release, Repository
 from app.github.client import GitHubApiError
 from app.github.service import bind_repository, list_available_repositories
+from app.github.sync import sync_repository_data
 
 
 class BindRepositoryRequest(BaseModel):
@@ -14,6 +15,26 @@ class BindRepositoryRequest(BaseModel):
 
 
 router = APIRouter(prefix="/api/repositories", tags=["repositories"])
+
+
+@router.get("")
+def bound_repositories(request: Request) -> list[dict[str, object]]:
+    user = get_current_user(request)
+    with request.app.state.session_factory() as session:
+        repositories = session.scalars(
+            select(Repository)
+            .where(Repository.user_id == user.id)
+            .order_by(Repository.updated_at.desc())
+        )
+        return [
+            {
+                "id": item.id,
+                "full_name": item.full_name,
+                "private": item.private,
+                "webhook_configured": item.github_webhook_id is not None,
+            }
+            for item in repositories
+        ]
 
 
 @router.get("/available")
@@ -117,6 +138,24 @@ def releases(request: Request, repository_id: int) -> list[dict[str, object]]:
             }
             for item in items
         ]
+
+
+@router.post("/{repository_id}/sync")
+def sync_repository(request: Request, repository_id: int) -> dict[str, int]:
+    user = get_current_user(request)
+    try:
+        with request.app.state.session_factory() as session:
+            repository = _require_owned_repository(session, repository_id, user.id)
+            return sync_repository_data(
+                session,
+                user,
+                repository,
+                request.app.state.github_client,
+                request.app.state.token_cipher,
+            )
+    except GitHubApiError as exc:
+        status_code = exc.status_code if exc.status_code in {403, 404, 429} else 502
+        raise HTTPException(status_code=status_code, detail=str(exc)) from exc
 
 
 def _require_owned_repository(session, repository_id: int, user_id: int) -> Repository:

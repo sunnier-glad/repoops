@@ -15,12 +15,14 @@ export async function request(path, options = {}) {
 }
 
 export const getSession = () => request('/api/auth/me')
+export const getBoundRepositories = () => request('/api/repositories')
 export const getAvailableRepositories = () => request('/api/repositories/available')
 export const bindRepository = (fullName) => request('/api/repositories', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({ full_name: fullName }),
 })
+export const syncRepository = (repositoryId) => request(`/api/repositories/${repositoryId}/sync`, { method: 'POST' })
 export const getPullRequests = (repositoryId) => request(`/api/repositories/${repositoryId}/pull-requests`)
 export const getFailedWorkflows = (repositoryId) => request(`/api/repositories/${repositoryId}/ci/failures`)
 export const getReleases = (repositoryId) => request(`/api/repositories/${repositoryId}/releases`)

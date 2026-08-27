@@ -1,11 +1,12 @@
 import hashlib
 import hmac
+from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
 
 from app.auth.service import GitHubIdentity
 from app.config import Settings
-from app.db.models import Job, Repository, User
+from app.db.models import Job, PullRequest, Release, Repository, User, WorkflowRun
 from app.github.schemas import GitHubRepository, WebhookInfo
 from app.main import create_app
 
@@ -28,6 +29,15 @@ class FakeGitHubClient:
     ) -> WebhookInfo:
         self.last_webhook_secret = secret
         return WebhookInfo(7, True)
+
+    def list_pull_requests(self, access_token: str, repository: str):
+        return [SimpleNamespace(github_id=11, number=3, title="Improve docs", body="Details", state="open", head_branch="docs", head_sha="abc", author_login="octocat", html_url="https://example.test/pr/3")]
+
+    def list_workflow_runs(self, access_token: str, repository: str):
+        return [SimpleNamespace(github_id=21, workflow_name="CI", status="completed", conclusion="failure", branch="main", commit_sha="def", html_url="https://example.test/run/21")]
+
+    def list_releases(self, access_token: str, repository: str):
+        return [SimpleNamespace(github_id=31, tag_name="v1.0.0", name="First release", body="Notes", published_at="2026-08-27T10:00:00Z", html_url="https://example.test/release/31")]
 
 
 def make_client(tmp_path, webhook_enabled=True):
@@ -89,6 +99,43 @@ def test_local_mode_binds_repository_without_registering_webhook(tmp_path):
         "webhook_configured": False,
     }
     assert client.fake_github.last_webhook_secret == ""
+
+
+def test_bound_repositories_can_be_restored_after_page_refresh(tmp_path):
+    client = make_client(tmp_path, webhook_enabled=False)
+    login(client)
+    client.post("/api/repositories", json={"full_name": "octocat/demo"})
+
+    response = client.get("/api/repositories")
+
+    assert response.status_code == 200
+    assert response.json() == [
+        {
+            "id": 1,
+            "full_name": "octocat/demo",
+            "private": False,
+            "webhook_configured": False,
+        }
+    ]
+
+
+def test_sync_endpoint_imports_current_github_quality_data(tmp_path):
+    client = make_client(tmp_path, webhook_enabled=False)
+    login(client)
+    repository = client.post("/api/repositories", json={"full_name": "octocat/demo"}).json()
+
+    response = client.post(f"/api/repositories/{repository['id']}/sync")
+
+    assert response.status_code == 200
+    assert response.json() == {"pull_requests": 1, "failed_workflows": 1, "releases": 1}
+    assert client.get(f"/api/repositories/{repository['id']}/pull-requests").json()[0]["number"] == 3
+    assert client.get(f"/api/repositories/{repository['id']}/ci/failures").json()[0]["workflow_name"] == "CI"
+    assert client.get(f"/api/repositories/{repository['id']}/releases").json()[0]["tag_name"] == "v1.0.0"
+
+    with client.repoops_app.state.session_factory() as session:
+        assert session.query(PullRequest).count() == 1
+        assert session.query(WorkflowRun).count() == 1
+        assert session.query(Release).count() == 1
 
 
 def test_webhook_verifies_signature_persists_raw_event_and_returns_202(tmp_path):
