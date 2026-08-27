@@ -18,4 +18,4 @@
 
 ## 面试真实性边界
 
-当前已验证：后端 `28 passed`、前端 `3 passed`、Ruff 全部通过、Alembic 可升级到 `0004_jobs_ai`、Vite production build 成功、Compose 配置可解析。Docker 镜像构建仍需在 Docker daemon 启动后复验，不能在简历中写“已完成生产部署”。
+当前已验证：后端 `29 passed`、前端 `3 passed`、Ruff 全部通过、Alembic 已在 PostgreSQL 升级到 `0004_jobs_ai`、Vite production build 成功、API/Worker/Frontend Docker 镜像构建成功，Compose 全部服务已启动；API 与前端代理均返回 200。该结果代表本地联调通过，不等同于公网生产部署。

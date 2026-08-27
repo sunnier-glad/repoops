@@ -27,3 +27,4 @@
 
 - Windows 先确认 Docker Desktop 的 Linux daemon 已启动，再运行 `docker compose build`。
 - Compose 文件本身可用 `docker compose config --quiet` 做无启动校验。
+- 如果 Docker Hub 拉取超时，先检查 Docker Desktop 的 HTTP/HTTPS 代理；构建成功后可用 `docker compose ps`、`http://localhost:8000/api/health` 和 `http://localhost:5174/api/health` 验证完整本地联调。
