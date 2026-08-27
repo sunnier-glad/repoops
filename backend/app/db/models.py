@@ -114,6 +114,7 @@ class PullRequest(Base):
     head_sha: Mapped[str | None] = mapped_column(String(100), nullable=True)
     author_login: Mapped[str | None] = mapped_column(String(100), nullable=True)
     html_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    is_demo: Mapped[bool] = mapped_column(default=False, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, onupdate=utc_now
     )
@@ -134,6 +135,7 @@ class WorkflowRun(Base):
     branch: Mapped[str | None] = mapped_column(String(255), nullable=True)
     commit_sha: Mapped[str | None] = mapped_column(String(100), nullable=True)
     html_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    is_demo: Mapped[bool] = mapped_column(default=False, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, onupdate=utc_now
     )
@@ -153,6 +155,7 @@ class Release(Base):
     body: Mapped[str | None] = mapped_column(Text, nullable=True)
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     html_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    is_demo: Mapped[bool] = mapped_column(default=False, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, onupdate=utc_now
     )

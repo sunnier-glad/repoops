@@ -7,6 +7,8 @@ import {
   getPullRequests,
   getReleases,
   getBoundRepositories,
+  loadDemoData,
+  clearDemoData,
   request,
   syncRepository,
 } from '../api/client'
@@ -79,5 +81,17 @@ describe('api client', () => {
 
     await expect(getBoundRepositories()).resolves.toEqual([{ id: 1, full_name: 'octocat/demo' }])
     expect(fetchMock).toHaveBeenCalledWith('/api/repositories', expect.objectContaining({ credentials: 'include' }))
+  })
+
+  it('loads and clears local demo data', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ demo: true, pull_requests: 1 }) })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ deleted: 3 }) })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(loadDemoData(1)).resolves.toEqual({ demo: true, pull_requests: 1 })
+    await expect(clearDemoData(1)).resolves.toEqual({ deleted: 3 })
+    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/repositories/1/demo-data', expect.objectContaining({ method: 'POST' }))
+    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/repositories/1/demo-data', expect.objectContaining({ method: 'DELETE' }))
   })
 })

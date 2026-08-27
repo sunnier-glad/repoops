@@ -41,6 +41,7 @@ def sync_repository_data(
         current.head_sha = item.head_sha
         current.author_login = item.author_login
         current.html_url = item.html_url
+        current.is_demo = False
 
     for item in workflow_runs:
         current = session.scalar(
@@ -58,6 +59,7 @@ def sync_repository_data(
         current.branch = item.branch
         current.commit_sha = item.commit_sha
         current.html_url = item.html_url
+        current.is_demo = False
 
     for item in releases:
         current = session.scalar(
@@ -74,6 +76,7 @@ def sync_repository_data(
         current.body = item.body
         current.published_at = _parse_github_datetime(item.published_at)
         current.html_url = item.html_url
+        current.is_demo = False
 
     session.commit()
     return {

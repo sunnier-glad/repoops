@@ -101,6 +101,30 @@ def test_local_mode_binds_repository_without_registering_webhook(tmp_path):
     assert client.fake_github.last_webhook_secret == ""
 
 
+def test_demo_data_can_be_loaded_cleared_and_is_blocked_in_production(tmp_path):
+    client = make_client(tmp_path, webhook_enabled=False)
+    login(client)
+    repository = client.post("/api/repositories", json={"full_name": "octocat/demo"}).json()
+
+    loaded = client.post(f"/api/repositories/{repository['id']}/demo-data")
+
+    assert loaded.status_code == 200
+    assert loaded.json() == {"demo": True, "pull_requests": 1, "failed_workflows": 1, "releases": 1}
+    with client.repoops_app.state.session_factory() as session:
+        assert session.query(PullRequest).filter_by(is_demo=True).count() == 1
+        assert session.query(WorkflowRun).filter_by(is_demo=True).count() == 1
+        assert session.query(Release).filter_by(is_demo=True).count() == 1
+
+    client.repoops_app.state.settings.app_env = "production"
+    blocked = client.post(f"/api/repositories/{repository['id']}/demo-data")
+    assert blocked.status_code == 403
+
+    client.repoops_app.state.settings.app_env = "development"
+    cleared = client.delete(f"/api/repositories/{repository['id']}/demo-data")
+    assert cleared.status_code == 200
+    assert cleared.json() == {"deleted": 3}
+
+
 def test_bound_repositories_can_be_restored_after_page_refresh(tmp_path):
     client = make_client(tmp_path, webhook_enabled=False)
     login(client)
