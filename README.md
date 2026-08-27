@@ -1,0 +1,55 @@
+# RepoOps
+
+RepoOps 是面向个人开发者和小团队的 GitHub 项目协作与发布质量平台，第一版聚焦 CI 失败处理、Pull Request 状态和版本发布质量。
+
+## 当前状态
+
+已完成 MVP 主链路：GitHub OAuth、账号和仓库绑定、Webhook HMAC 校验、delivery 幂等、PR/CI/Release 状态、Celery 任务入口、AI 结构化分析和 Vue 质量工作台。
+
+当前边界：AI 只生成摘要、CI 失败解释和 Release Notes 草稿，不自动改代码、合并 PR、发布版本或部署。
+
+## 运行方式
+
+复制 `.env.example` 为 `.env`，填入 GitHub OAuth 和加密密钥后启动基础服务：
+
+```powershell
+docker compose up -d --build
+```
+
+开发时也可以分别启动后端和前端：
+
+```powershell
+\.venv\Scripts\python.exe -m uvicorn app.main:app --app-dir backend --reload
+npm run dev --prefix frontend
+```
+
+默认前端地址是 `http://localhost:5174`，API 健康检查是 `/api/health`。生产环境应先执行 `alembic upgrade head`，再启用 `CELERY_ENABLED=true` 启动 Worker。
+
+## 质量保证
+
+- 后端：pytest、Ruff、Alembic 迁移验证。
+- 前端：Vitest、Vite production build。
+- CI：`.github/workflows/ci.yml` 同时检查后端、前端和 Compose 配置。
+
+## 本地入口
+
+后端测试：
+
+```powershell
+\.venv\Scripts\python.exe -m pytest backend\tests -q
+```
+
+前端命令：
+
+```powershell
+npm install --prefix frontend
+npm run build --prefix frontend
+```
+
+基础服务：
+
+```powershell
+docker compose up -d postgres redis
+```
+
+真实 OAuth、Webhook Secret、LLM API Key 和数据库密码只放在本地 `.env` 或部署环境，不提交到 Git。
