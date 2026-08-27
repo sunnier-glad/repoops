@@ -5,7 +5,7 @@
 1. 复制 `.env.example` 为 `.env`，填写 GitHub OAuth、Session Secret 和 Fernet 密钥。
 2. 启动 `docker compose up -d --build`。
 3. 打开 `http://localhost:5174`，点击 GitHub 登录。
-4. 登录后绑定一个测试仓库，并在 GitHub Webhook 设置中确认回调地址可达。
+4. 登录后在“选择工作仓库”面板选择并绑定一个测试仓库，再在 GitHub Webhook 设置中确认回调地址可达。
 
 ## 演示顺序
 
