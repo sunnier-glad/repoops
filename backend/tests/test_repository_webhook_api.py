@@ -11,7 +11,8 @@ from app.main import create_app
 
 
 class FakeGitHubClient:
-    last_webhook_secret = ""
+    def __init__(self):
+        self.last_webhook_secret = ""
 
     def exchange_code(self, code: str) -> str:
         return "raw-token"
@@ -29,13 +30,14 @@ class FakeGitHubClient:
         return WebhookInfo(7, True)
 
 
-def make_client(tmp_path):
+def make_client(tmp_path, webhook_enabled=True):
     settings = Settings(
         database_url=f"sqlite+pysqlite:///{tmp_path / 'repoops.db'}",
         github_client_id="client-id",
         github_client_secret="client-secret",
         github_redirect_uri="http://testserver/api/auth/github/callback",
         github_webhook_base_url="https://repoops.example.com",
+        github_webhook_enabled=webhook_enabled,
         session_secret="test-session-secret",
     )
     fake = FakeGitHubClient()
@@ -71,6 +73,22 @@ def test_repository_binding_only_allows_a_repository_from_github_account(tmp_pat
 
     rejected = client.post("/api/repositories", json={"full_name": "octocat/other"})
     assert rejected.status_code == 403
+
+
+def test_local_mode_binds_repository_without_registering_webhook(tmp_path):
+    client = make_client(tmp_path, webhook_enabled=False)
+    login(client)
+
+    bound = client.post("/api/repositories", json={"full_name": "octocat/demo"})
+
+    assert bound.status_code == 201
+    assert bound.json() == {
+        "id": 1,
+        "full_name": "octocat/demo",
+        "private": False,
+        "webhook_configured": False,
+    }
+    assert client.fake_github.last_webhook_secret == ""
 
 
 def test_webhook_verifies_signature_persists_raw_event_and_returns_202(tmp_path):

@@ -28,3 +28,9 @@
 - Windows 先确认 Docker Desktop 的 Linux daemon 已启动，再运行 `docker compose build`。
 - Compose 文件本身可用 `docker compose config --quiet` 做无启动校验。
 - 如果 Docker Hub 拉取超时，先检查 Docker Desktop 的 HTTP/HTTPS 代理；构建成功后可用 `docker compose ps`、`http://localhost:8000/api/health` 和 `http://localhost:5174/api/health` 验证完整本地联调。
+
+## 绑定仓库提示 Validation Failed
+
+- GitHub 仓库列表能加载但绑定失败，通常是 `GITHUB_WEBHOOK_BASE_URL` 使用了 `localhost`，GitHub 无法验证本机 Webhook 地址。
+- 本地演示将 `GITHUB_WEBHOOK_ENABLED=false`，绑定仍会保存仓库，但不会注册远程 Webhook，状态显示为“Webhook 待配置”。
+- 生产环境将该开关设为 `true`，并使用公网 HTTPS 地址；修改 `.env` 后执行 `docker compose up -d`。

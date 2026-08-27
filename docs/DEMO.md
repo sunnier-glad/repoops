@@ -7,6 +7,8 @@
 3. 打开 `http://localhost:5174`，点击 GitHub 登录。
 4. 登录后在“选择工作仓库”面板选择并绑定一个测试仓库，再在 GitHub Webhook 设置中确认回调地址可达。
 
+本地演示时可将 `GITHUB_WEBHOOK_ENABLED=false`，这样绑定会保留仓库但跳过远程 Webhook 注册，界面会显示“Webhook 待配置”。要接收真实 GitHub 事件，生产环境必须改为 `true`，并将 `GITHUB_WEBHOOK_BASE_URL` 设置为公网 HTTPS 地址。
+
 ## 演示顺序
 
 1. 展示 OAuth 登录后 `/api/auth/me` 只返回用户标识，不返回 access token。

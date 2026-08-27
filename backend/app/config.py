@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     github_client_secret: str = ""
     github_redirect_uri: str = "http://localhost:8000/api/auth/github/callback"
     github_webhook_base_url: str = "http://localhost:8000"
+    github_webhook_enabled: bool = True
     github_token_encryption_key: str = ""
 
     llm_base_url: str = "https://api.deepseek.com"

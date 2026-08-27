@@ -40,6 +40,7 @@ def create_repository(request: Request, body: BindRepositoryRequest) -> dict[str
                 request.app.state.github_client,
                 request.app.state.token_cipher,
                 request.app.state.settings.github_webhook_base_url,
+                request.app.state.settings.github_webhook_enabled,
             )
             return {
                 "id": repository.id,

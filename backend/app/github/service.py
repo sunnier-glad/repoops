@@ -28,6 +28,7 @@ def bind_repository(
     github: GitHubClient,
     cipher: TokenCipher,
     callback_base_url: str,
+    webhook_enabled: bool = True,
 ) -> Repository:
     available = list_available_repositories(user, github, cipher)
     selected = next((item for item in available if item.full_name == full_name), None)
@@ -56,17 +57,18 @@ def bind_repository(
     )
     session.add(repository)
     session.flush()
-    try:
-        hook = github.create_webhook(
-            github_access_token(user, cipher),
-            selected.full_name,
-            f"{callback_base_url.rstrip('/')}/api/webhooks/github/{repository.id}",
-            secret,
-        )
-    except GitHubApiError:
-        session.rollback()
-        raise
-    repository.github_webhook_id = hook.id
+    if webhook_enabled:
+        try:
+            hook = github.create_webhook(
+                github_access_token(user, cipher),
+                selected.full_name,
+                f"{callback_base_url.rstrip('/')}/api/webhooks/github/{repository.id}",
+                secret,
+            )
+        except GitHubApiError:
+            session.rollback()
+            raise
+        repository.github_webhook_id = hook.id
     session.commit()
     session.refresh(repository)
     return repository
