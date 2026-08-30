@@ -6,7 +6,6 @@ from app.auth.dependencies import get_current_user
 from app.ci.service import list_failed_workflows
 from app.db.models import PullRequest, Release, Repository
 from app.github.client import GitHubApiError
-from app.github.demo import clear_demo_data, load_demo_data
 from app.github.service import bind_repository, list_available_repositories
 from app.github.sync import sync_repository_data
 from app.quality.service import evaluate_release_quality
@@ -94,7 +93,6 @@ def pull_requests(request: Request, repository_id: int) -> list[dict[str, object
                 "head_branch": item.head_branch,
                 "head_sha": item.head_sha,
                 "html_url": item.html_url,
-                "is_demo": item.is_demo,
             }
             for item in items
         ]
@@ -114,7 +112,6 @@ def failed_workflows(request: Request, repository_id: int) -> list[dict[str, obj
                 "commit_sha": item.commit_sha,
                 "conclusion": item.conclusion,
                 "html_url": item.html_url,
-                "is_demo": item.is_demo,
             }
             for item in items
             if item.repository_id == repository_id
@@ -139,7 +136,6 @@ def releases(request: Request, repository_id: int) -> list[dict[str, object]]:
                 "body": item.body,
                 "published_at": item.published_at.isoformat() if item.published_at else None,
                 "html_url": item.html_url,
-                "is_demo": item.is_demo,
             }
             for item in items
         ]
@@ -151,26 +147,6 @@ def quality_gate(request: Request, repository_id: int) -> dict[str, object]:
     with request.app.state.session_factory() as session:
         repository = _require_owned_repository(session, repository_id, user.id)
         return evaluate_release_quality(session, repository).as_dict()
-
-
-@router.post("/{repository_id}/demo-data")
-def create_demo_data(request: Request, repository_id: int) -> dict[str, int | bool]:
-    user = get_current_user(request)
-    if request.app.state.settings.app_env.lower() == "production":
-        raise HTTPException(status_code=403, detail="生产环境不允许加载演示数据")
-    with request.app.state.session_factory() as session:
-        repository = _require_owned_repository(session, repository_id, user.id)
-        return load_demo_data(session, repository)
-
-
-@router.delete("/{repository_id}/demo-data")
-def delete_demo_data(request: Request, repository_id: int) -> dict[str, int]:
-    user = get_current_user(request)
-    if request.app.state.settings.app_env.lower() == "production":
-        raise HTTPException(status_code=403, detail="生产环境不允许清除演示数据")
-    with request.app.state.session_factory() as session:
-        repository = _require_owned_repository(session, repository_id, user.id)
-        return {"deleted": clear_demo_data(session, repository)}
 
 
 @router.post("/{repository_id}/sync")

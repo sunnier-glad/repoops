@@ -31,7 +31,7 @@
   - 主分支最新 CI 失败为 `blocked`。
   - CI 缺失/运行中、存在开放 PR、无 Release 或发布说明为空为 `warning`。
   - 全部检查通过为 `ready`；每项返回可解释证据和可选原始链接。
-  - 门禁查询过滤 `is_demo=true` 数据，不依赖 AI，不自动发布。
+  - 门禁不依赖 AI，不自动发布。
 - 已实现 Vue 发布门禁面板：
   - 仓库同步后同时读取真实门禁 API。
   - 展示 `阻塞发布 / 需要确认 / 可以发布`、三项证据和 GitHub 原始链接。
@@ -53,11 +53,12 @@
 - 本地 SQLite 已保存 1 个真实 GitHub 用户和绑定仓库 `sunnier-glad/life-deadline-radar`。
 - 已调用真实 GitHub 同步：PR 0、失败 Workflow 0、Release 0；这是仓库当前真实状态，不是演示数据或同步异常。
 - OAuth 完成后：同步真实仓库，验证 PR、失败 Workflow 和 Release 详情页；不要创建演示数据。
-- 后端仍保留历史 demo 路由与 `demo.py`，UI 已不使用；待真实同步通过后评估移除，迁移历史不要随意删除。
+- 后端运行时演示接口、服务和 `is_demo` 字段已移除；保留 `0005` 历史迁移，并由 `0006` 向前删除旧字段。
+- 真实数据模式清理验证：后端完整测试 36/36 通过、Ruff 通过、Alembic 从空库升级到 `0006_remove_demo_flags` 通过。
 - Docker 修复未完成，不要执行 factory reset；重启系统后先确认 stale socket 是否自动消失。
 
 ## 下一步
 
 1. 用户刷新 `http://localhost:5174/`，确认 OAuth 修复后不再落到 API 404。
 2. 若需要验证非零真实数据，在绑定仓库创建真实 PR、GitHub Actions 运行和 Release 后重新同步。
-3. 下一阶段清理后端残留 demo 路由/服务，并实现真实 Release Notes 草稿工作流。
+3. 下一阶段实现真实 Release Notes 草稿工作流。

@@ -61,7 +61,6 @@ def _default_branch_ci_check(session: Session, repository: Repository) -> Qualit
         .where(
             WorkflowRun.repository_id == repository.id,
             WorkflowRun.branch == repository.default_branch,
-            WorkflowRun.is_demo.is_(False),
         )
         .order_by(WorkflowRun.github_id.desc())
         .limit(1)
@@ -103,7 +102,6 @@ def _open_pull_requests_check(session: Session, repository: Repository) -> Quali
         select(func.count(PullRequest.id)).where(
             PullRequest.repository_id == repository.id,
             PullRequest.state == "open",
-            PullRequest.is_demo.is_(False),
         )
     )
     if count:
@@ -126,7 +124,6 @@ def _release_notes_check(session: Session, repository: Repository) -> QualityChe
         select(Release)
         .where(
             Release.repository_id == repository.id,
-            Release.is_demo.is_(False),
         )
         .order_by(Release.github_id.desc())
         .limit(1)
