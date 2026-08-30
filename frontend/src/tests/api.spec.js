@@ -2,13 +2,16 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
   bindRepository,
+  generateReleaseNoteDraft,
   getAvailableRepositories,
   getFailedWorkflows,
   getPullRequests,
   getQualityGate,
+  getReleaseNoteDraft,
   getReleases,
   getBoundRepositories,
   request,
+  saveReleaseNoteDraft,
   syncRepository,
 } from '../api/client'
 
@@ -97,5 +100,28 @@ describe('api client', () => {
 
     await expect(getQualityGate(1)).resolves.toEqual(gate)
     expect(fetchMock).toHaveBeenCalledWith('/api/repositories/1/quality-gate', expect.objectContaining({ credentials: 'include' }))
+  })
+
+  it('loads, generates, and saves a release notes draft', async () => {
+    const generated = { id: 4, version: 'v1.2.0', content: '# v1.2.0', sources: [] }
+    const saved = { ...generated, content: '# v1.2.0\n\nEdited' }
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => generated })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => generated })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => saved })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(getReleaseNoteDraft(7)).resolves.toEqual(generated)
+    await expect(generateReleaseNoteDraft(7, 'v1.2.0')).resolves.toEqual(generated)
+    await expect(saveReleaseNoteDraft(7, saved.content)).resolves.toEqual(saved)
+
+    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/repositories/7/release-notes/draft', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ version: 'v1.2.0' }),
+    }))
+    expect(fetchMock).toHaveBeenNthCalledWith(3, '/api/repositories/7/release-notes/draft', expect.objectContaining({
+      method: 'PUT',
+      body: JSON.stringify({ content: saved.content }),
+    }))
   })
 })

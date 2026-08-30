@@ -1,14 +1,17 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import {
   bindRepository,
+  generateReleaseNoteDraft,
   getBoundRepositories,
   getAvailableRepositories,
   getFailedWorkflows,
   getPullRequests,
   getQualityGate,
+  getReleaseNoteDraft,
   getReleases,
   getSession,
+  saveReleaseNoteDraft,
   syncRepository,
 } from './api/client'
 
@@ -27,6 +30,13 @@ const pullRequests = ref([])
 const failedWorkflows = ref([])
 const releases = ref([])
 const qualityGate = ref(null)
+const releaseNoteDraft = ref(null)
+const releaseVersion = ref('v0.1.0')
+const releaseContent = ref('')
+const releaseDraftLoading = ref(false)
+const releaseDraftSaving = ref(false)
+const releaseDraftStatus = ref('')
+const releaseDraftError = ref('')
 
 const navItems = [
   { id: 'overview', label: '质量总览', icon: '⌁' },
@@ -140,6 +150,70 @@ async function loadQualityData() {
     syncError.value = error.message
   }
 }
+
+function applyReleaseNoteDraft(draft) {
+  releaseNoteDraft.value = draft
+  releaseVersion.value = draft.version
+  releaseContent.value = draft.content
+}
+
+async function loadReleaseNoteDraft() {
+  if (!boundRepository.value) return
+  releaseDraftLoading.value = true
+  releaseDraftError.value = ''
+  releaseDraftStatus.value = ''
+  try {
+    applyReleaseNoteDraft(await getReleaseNoteDraft(boundRepository.value.id))
+  } catch (error) {
+    if (error.status === 404) {
+      releaseNoteDraft.value = null
+      releaseContent.value = ''
+    } else {
+      releaseDraftError.value = error.message
+    }
+  } finally {
+    releaseDraftLoading.value = false
+  }
+}
+
+async function handleGenerateReleaseNoteDraft() {
+  const version = releaseVersion.value.trim()
+  if (!boundRepository.value || !version) return
+  releaseDraftSaving.value = true
+  releaseDraftError.value = ''
+  releaseDraftStatus.value = '正在生成草稿…'
+  try {
+    applyReleaseNoteDraft(await generateReleaseNoteDraft(boundRepository.value.id, version))
+    qualityGate.value = await getQualityGate(boundRepository.value.id)
+    releaseDraftStatus.value = '草稿已生成，发布门禁已更新'
+  } catch (error) {
+    releaseDraftStatus.value = ''
+    releaseDraftError.value = error.message
+  } finally {
+    releaseDraftSaving.value = false
+  }
+}
+
+async function handleSaveReleaseNoteDraft() {
+  if (!boundRepository.value || !releaseNoteDraft.value || !releaseContent.value.trim()) return
+  releaseDraftSaving.value = true
+  releaseDraftError.value = ''
+  releaseDraftStatus.value = '正在保存草稿…'
+  try {
+    applyReleaseNoteDraft(await saveReleaseNoteDraft(boundRepository.value.id, releaseContent.value))
+    qualityGate.value = await getQualityGate(boundRepository.value.id)
+    releaseDraftStatus.value = '草稿已保存'
+  } catch (error) {
+    releaseDraftStatus.value = ''
+    releaseDraftError.value = error.message
+  } finally {
+    releaseDraftSaving.value = false
+  }
+}
+
+watch(activeView, (view) => {
+  if (view === 'releases' && boundRepository.value) loadReleaseNoteDraft()
+})
 
 onMounted(async () => {
   if (typeof fetch !== 'function') {
@@ -285,6 +359,55 @@ onMounted(async () => {
           <div><span class="eyebrow">{{ detailConfig.eyebrow }}</span><h2>{{ detailConfig.title }}</h2><p>{{ detailConfig.description }}</p></div>
           <button class="text-button" type="button" @click="activeView = 'overview'">返回总览 ↩</button>
         </div>
+        <article v-if="activeView === 'releases'" class="panel release-editor" data-testid="release-notes-editor">
+          <div class="release-editor-heading">
+            <div>
+              <span class="eyebrow">RELEASE NOTES DRAFT</span>
+              <h2>发布说明草稿</h2>
+              <p>根据上次发布后合并到默认分支的真实 PR 生成，支持人工编辑和保存。</p>
+            </div>
+            <span class="draft-safety-badge">仅保存草稿 · 不自动发布</span>
+          </div>
+
+          <div class="release-editor-toolbar">
+            <label class="version-field">
+              <span>目标版本</span>
+              <input v-model="releaseVersion" data-testid="release-version" type="text" maxlength="100" placeholder="例如 v1.2.0" :disabled="!boundRepository || releaseDraftSaving">
+            </label>
+            <button class="editor-primary-button" data-testid="generate-release-notes" type="button" :disabled="!boundRepository || !releaseVersion.trim() || releaseDraftLoading || releaseDraftSaving" @click="handleGenerateReleaseNoteDraft">
+              {{ releaseDraftSaving ? '处理中…' : releaseNoteDraft ? '重新生成' : '生成草稿' }}
+            </button>
+            <button class="editor-secondary-button" data-testid="save-release-notes" type="button" :disabled="!releaseNoteDraft || !releaseContent.trim() || releaseDraftLoading || releaseDraftSaving" @click="handleSaveReleaseNoteDraft">保存修改</button>
+          </div>
+
+          <p v-if="releaseDraftLoading" class="draft-message">正在读取草稿…</p>
+          <p v-else-if="!boundRepository" class="draft-message">请先绑定 GitHub 仓库，再生成发布说明。</p>
+          <p v-else-if="!releaseNoteDraft" class="draft-message">尚未生成草稿。填写目标版本后，系统会从已同步的合并 PR 中提取变更。</p>
+          <p v-if="releaseDraftStatus" class="draft-message success" role="status">{{ releaseDraftStatus }}</p>
+          <p v-if="releaseDraftError" class="draft-message error" role="alert">{{ releaseDraftError }}</p>
+
+          <div class="release-editor-grid">
+            <label class="markdown-editor">
+              <span>Markdown 内容</span>
+              <textarea v-model="releaseContent" data-testid="release-notes-content" rows="15" placeholder="生成草稿后可在这里编辑…" :disabled="!releaseNoteDraft || releaseDraftLoading || releaseDraftSaving"></textarea>
+            </label>
+            <aside class="release-sources" aria-label="草稿来源">
+              <div class="source-summary">
+                <span class="eyebrow">TRACEABLE SOURCES</span>
+                <strong>{{ releaseNoteDraft?.source_pr_count || 0 }} 个来源 PR</strong>
+                <p>{{ releaseNoteDraft?.based_on_release ? `基于 ${releaseNoteDraft.based_on_release.tag_name} 之后的变更` : '基于仓库开始记录以来的变更' }}</p>
+              </div>
+              <div v-if="releaseNoteDraft?.sources?.length" class="source-list">
+                <a v-for="source in releaseNoteDraft.sources" :key="source.number" :href="source.html_url || '#'" target="_blank" rel="noreferrer">
+                  <span>#{{ source.number }}</span>
+                  <strong>{{ source.title }}</strong>
+                  <small>{{ source.author_login ? `@${source.author_login}` : '未知作者' }} ↗</small>
+                </a>
+              </div>
+              <p v-else class="source-empty">当前没有符合条件的已合并 PR。草稿仍可生成和手动编辑，但不会伪造变更内容。</p>
+            </aside>
+          </div>
+        </article>
         <article class="panel detail-panel">
           <div v-if="detailItems.length" class="detail-list">
             <a v-for="item in detailItems" :key="item.id || item.number || item.tag_name" class="detail-row" :href="item.html_url || '#'" target="_blank" rel="noreferrer">
@@ -324,6 +447,36 @@ onMounted(async () => {
 .section-heading, .panel-heading { display: flex; justify-content: space-between; align-items: flex-end; gap: 20px; }.section-heading { margin: 46px 0 17px; }.quality-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; }.quality-card { min-height: 176px; display: flex; flex-direction: column; padding: 20px; border: 1px solid #263b3d; border-radius: 13px; background: #101c1e; }.quality-card.danger { border-top: 2px solid #fb8c78; }.quality-card.accent { border-top: 2px solid #8dbae9; }.quality-card.success { border-top: 2px solid #8debc9; }.card-topline, .card-footer { display: flex; justify-content: space-between; color: #839997; font-size: 12px; }.card-arrow { color: #8debc9; }.card-value { margin: 25px 0 auto; color: #eff9f5; font-size: 43px; letter-spacing: -.08em; }.card-footer { padding-top: 14px; border-top: 1px solid #233335; font-size: 10px; }.card-footer span:last-child { color: #aac0bc; }.card-action { border: 0; padding: 0; color: #aac0bc; background: transparent; cursor: pointer; font-size: 10px; }.card-action:hover { color: #8debc9; }
 .release-gate { display: grid; grid-template-columns: minmax(220px, .7fr) 1.5fr; gap: 24px; margin-bottom: 15px; padding: 23px; border: 1px solid #304547; border-left: 3px solid #6c8582; border-radius: 13px; background: linear-gradient(115deg, #111f21, #101a1c); }.release-gate.blocked { border-left-color: #fb8c78; }.release-gate.warning { border-left-color: #e3ba72; }.release-gate.ready { border-left-color: #8debc9; }.gate-summary { display: grid; align-content: start; }.gate-summary h2 { margin-bottom: 16px; }.gate-summary p { margin: 17px 0 0; color: #9aafac; font-size: 12px; line-height: 1.7; }.gate-badge { width: fit-content; border: 1px solid #405557; border-radius: 99px; padding: 7px 10px; color: #bacac7; font: 500 10px 'DM Mono', monospace; }.blocked .gate-badge { border-color: rgba(251, 140, 120, .5); color: #fb9b8a; }.warning .gate-badge { border-color: rgba(227, 186, 114, .5); color: #e3ba72; }.ready .gate-badge { border-color: rgba(141, 235, 201, .5); color: #8debc9; }.gate-checks { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }.gate-check { min-width: 0; padding: 16px; border: 1px solid #2a3e40; border-radius: 10px; background: rgba(7, 17, 19, .45); }.gate-check-heading { display: flex; justify-content: space-between; gap: 10px; align-items: center; }.gate-check-heading strong { font-size: 12px; }.gate-check-heading span { color: #829795; font: 500 9px 'DM Mono', monospace; }.gate-check.fail .gate-check-heading span { color: #fb9b8a; }.gate-check.warning .gate-check-heading span { color: #e3ba72; }.gate-check.pass .gate-check-heading span { color: #8debc9; }.gate-check p { min-height: 44px; margin: 11px 0 0; color: #78908d; font-size: 11px; line-height: 1.65; }.gate-check a { display: inline-block; margin-top: 12px; color: #8debc9; font-size: 10px; }
 .lower-grid { display: grid; grid-template-columns: 1.35fr 1fr; gap: 15px; margin-top: 15px; }.panel { min-height: 320px; padding: 23px; border: 1px solid #263b3d; border-radius: 13px; background: #101a1c; }.text-button { border: 0; color: #8debc9; background: transparent; cursor: pointer; font-size: 11px; }.empty-state { min-height: 240px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }.empty-icon { display: grid; place-items: center; width: 41px; height: 41px; margin-bottom: 15px; border: 1px solid #426462; border-radius: 50%; color: #8debc9; font-size: 23px; }.empty-state strong { font-size: 14px; }.empty-state p { max-width: 320px; margin: 8px 0 18px; color: #78908d; font-size: 12px; line-height: 1.7; }.empty-state a { color: #8debc9; font-size: 12px; font-weight: 700; }.activity-list { display: grid; gap: 0; margin-top: 18px; }.activity-row { display: grid; grid-template-columns: 68px minmax(0, 1fr) auto 18px; align-items: center; gap: 10px; padding: 13px 0; border-bottom: 1px solid #243638; color: #dcebe7; font-size: 12px; }.activity-label { color: #8debc9; font: 10px 'DM Mono', monospace; }.activity-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.activity-detail { color: #78908d; font-size: 11px; }.playbook-list { padding: 6px 0 0; margin: 0; list-style: none; }.playbook-list li { display: flex; gap: 16px; padding: 17px 0; border-bottom: 1px solid #243638; }.playbook-list li:last-child { border-bottom: 0; }.playbook-list li > span { color: #5e7b77; font: 11px 'DM Mono', monospace; }.playbook-list strong { font-size: 12px; }.playbook-list p { margin: 5px 0 0; color: #78908d; font-size: 11px; line-height: 1.6; }.detail-heading { align-items: flex-start; }.detail-heading p { max-width: 560px; margin: 8px 0 0; color: #78908d; font-size: 12px; line-height: 1.7; }.detail-panel { min-height: 320px; }.detail-list { display: grid; }.detail-row { display: grid; grid-template-columns: 78px minmax(0, 1fr) auto; align-items: center; gap: 18px; padding: 20px 0; border-bottom: 1px solid #243638; }.detail-row:last-child { border-bottom: 0; }.detail-kicker { color: #8debc9; font: 11px 'DM Mono', monospace; }.detail-main { min-width: 0; }.detail-main strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }.detail-main p { margin: 6px 0 0; color: #78908d; font-size: 11px; }.detail-status { color: #aac0bc; font-size: 11px; white-space: nowrap; }
-@media (max-width: 900px) { .sidebar { width: 190px; }.workspace-orbit { margin-right: 0; transform: scale(.8); }.release-gate { grid-template-columns: 1fr; }.lower-grid { grid-template-columns: 1fr; } }
-@media (max-width: 680px) { .app-shell { display: block; }.sidebar { width: auto; padding: 16px; border-right: 0; border-bottom: 1px solid #233335; }.brand-block { padding: 0 5px 15px; }.primary-nav { grid-template-columns: repeat(3, 1fr); }.nav-item { justify-content: center; padding: 8px 4px; font-size: 11px; }.nav-icon, .sidebar-note, .sidebar-footer { display: none; }.main-content { padding: 28px 16px 40px; }.topbar { display: block; }.topbar-actions { padding-top: 14px; }.workspace-banner { min-height: 170px; margin-top: 28px; padding: 23px; }.workspace-orbit { display: none; }.repository-picker { display: grid; }.repository-picker button { min-height: 42px; }.repository-bound-state { display: grid; gap: 6px; }.gate-checks, .quality-grid { grid-template-columns: 1fr; }.quality-card { min-height: 145px; }.section-heading { margin-top: 32px; }.detail-heading { display: block; }.detail-heading .text-button { margin-top: 18px; }.detail-row { grid-template-columns: 48px minmax(0, 1fr); gap: 10px; }.detail-status { grid-column: 2; }.detail-main strong { white-space: normal; } }
+.release-editor { min-height: auto; margin-bottom: 15px; }
+.release-editor-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; }
+.release-editor-heading h2 { margin: 8px 0 7px; }
+.release-editor-heading p { max-width: 620px; margin: 0; color: #78908d; font-size: 12px; line-height: 1.7; }
+.draft-safety-badge { flex: none; border: 1px solid rgba(141, 235, 201, .35); border-radius: 99px; padding: 7px 10px; color: #8debc9; font: 500 9px 'DM Mono', monospace; }
+.release-editor-toolbar { display: grid; grid-template-columns: minmax(190px, 1fr) auto auto; align-items: end; gap: 10px; margin: 24px 0 16px; }
+.version-field, .markdown-editor { display: grid; gap: 8px; color: #91a6a3; font-size: 11px; }
+.version-field input, .markdown-editor textarea { width: 100%; border: 1px solid #304547; border-radius: 9px; outline: none; color: #e9f1ef; background: #0b1517; }
+.version-field input { min-height: 42px; padding: 0 13px; }
+.markdown-editor textarea { min-height: 330px; padding: 15px; resize: vertical; font: 12px/1.75 'DM Mono', monospace; }
+.version-field input:focus, .markdown-editor textarea:focus { border-color: #8debc9; box-shadow: 0 0 0 3px rgba(141, 235, 201, .08); }
+.version-field input:disabled, .markdown-editor textarea:disabled { opacity: .55; cursor: not-allowed; }
+.editor-primary-button, .editor-secondary-button { min-height: 42px; border-radius: 9px; padding: 0 16px; cursor: pointer; font-size: 11px; font-weight: 700; }
+.editor-primary-button { border: 1px solid #8debc9; color: #071313; background: #8debc9; }
+.editor-secondary-button { border: 1px solid #3b5153; color: #c8d8d4; background: transparent; }
+.editor-primary-button:disabled, .editor-secondary-button:disabled { opacity: .45; cursor: not-allowed; }
+.draft-message { margin: 8px 0 15px; color: #91a6a3; font-size: 11px; }
+.draft-message.success { color: #8debc9; }
+.draft-message.error { color: #fb9b8a; }
+.release-editor-grid { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(250px, .75fr); gap: 15px; }
+.release-sources { min-width: 0; border: 1px solid #293e40; border-radius: 10px; padding: 17px; background: rgba(7, 17, 19, .45); }
+.source-summary { padding-bottom: 14px; border-bottom: 1px solid #243638; }
+.source-summary strong { display: block; margin-top: 9px; font-size: 14px; }
+.source-summary p, .source-empty { margin: 7px 0 0; color: #78908d; font-size: 10px; line-height: 1.7; }
+.source-list { display: grid; }
+.source-list a { display: grid; grid-template-columns: 38px minmax(0, 1fr); gap: 5px 8px; padding: 13px 0; border-bottom: 1px solid #243638; }
+.source-list a:last-child { border-bottom: 0; }
+.source-list span { grid-row: 1 / span 2; color: #8debc9; font: 10px 'DM Mono', monospace; }
+.source-list strong { overflow: hidden; color: #dcebe7; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.source-list small { color: #78908d; font-size: 9px; }
+@media (max-width: 900px) { .sidebar { width: 190px; }.workspace-orbit { margin-right: 0; transform: scale(.8); }.release-gate { grid-template-columns: 1fr; }.lower-grid, .release-editor-grid { grid-template-columns: 1fr; }.markdown-editor textarea { min-height: 280px; } }
+@media (max-width: 680px) { .app-shell { display: block; }.sidebar { width: auto; padding: 16px; border-right: 0; border-bottom: 1px solid #233335; }.brand-block { padding: 0 5px 15px; }.primary-nav { grid-template-columns: repeat(3, 1fr); }.nav-item { justify-content: center; padding: 8px 4px; font-size: 11px; }.nav-icon, .sidebar-note, .sidebar-footer { display: none; }.main-content { padding: 28px 16px 40px; }.topbar { display: block; }.topbar-actions { padding-top: 14px; }.workspace-banner { min-height: 170px; margin-top: 28px; padding: 23px; }.workspace-orbit { display: none; }.repository-picker { display: grid; }.repository-picker button { min-height: 42px; }.repository-bound-state { display: grid; gap: 6px; }.gate-checks, .quality-grid { grid-template-columns: 1fr; }.quality-card { min-height: 145px; }.section-heading { margin-top: 32px; }.detail-heading { display: block; }.detail-heading .text-button { margin-top: 18px; }.detail-row { grid-template-columns: 48px minmax(0, 1fr); gap: 10px; }.detail-status { grid-column: 2; }.detail-main strong { white-space: normal; }.release-editor-heading { display: grid; }.draft-safety-badge { width: fit-content; }.release-editor-toolbar { grid-template-columns: 1fr 1fr; }.version-field { grid-column: 1 / -1; }.editor-primary-button, .editor-secondary-button { padding: 0 10px; }.markdown-editor textarea { min-height: 240px; } }
 </style>

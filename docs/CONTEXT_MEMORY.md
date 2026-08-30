@@ -4,7 +4,7 @@
 
 - 将 RepoOps 完成到适合求职展示的 GitHub 项目协作与发布质量平台。
 - 仅使用真实 GitHub PR、CI 和 Release 数据，不在产品界面加载演示数据。
-- 当前优先完成本地真实 OAuth、仓库绑定和同步冒烟验证。
+- 当前优先完成真实数据驱动的 Release Notes 草稿工作流。
 
 ## 已确认方案与关键决策
 
@@ -42,6 +42,11 @@
   - `GET/POST/PUT /api/repositories/{id}/release-notes/draft` 支持读取、生成与保存编辑。
   - 门禁“发布说明”检查改为读取待发布草稿，而不是已发布 Release。
   - `0007_release_note_drafts` 迁移已验证；本地 SQLite 已安全迁移到 0007，迁移前备份保存在系统临时目录。
+- 已实现 Release Notes 前端编辑器：
+  - 仅进入“Release 质量”页时按需读取草稿，避免总览页增加无关请求。
+  - 支持目标版本输入、生成/重新生成、Markdown 编辑与保存。
+  - 展示基准 Release、来源 PR 数量及 GitHub 原始链接，并明确标注“不自动发布”。
+  - 生成或保存后重新读取发布门禁，使发布说明检查状态保持一致。
 
 ## 用户原有改动
 
@@ -55,7 +60,7 @@
 - 已新增受控 `FRONTEND_URL` 配置，OAuth state 记录该地址，回调后返回 `http://localhost:5174/`；涉及 `config.py`、OAuth 路由、环境模板、Compose 和测试。
 - OAuth 回归测试 5/5 通过，Ruff 通过；API 已重启并再次通过健康检查。
 - 门禁及仓库 API 回归测试 10/10 通过，相关 Ruff 检查通过。
-- 前端 Vitest 12/12 通过，Vite production build 通过；API 健康检查和前端 HTTP 200 通过。
+- 前端 Vitest 14/14 通过，Vite production build 通过；API 健康检查和前端 HTTP 200 通过。
 - Release Notes 后端完整测试 38/38 通过、Ruff 和 0007 空库迁移通过；真实仓库同步成功，当前候选合并 PR 为 0。
 - 本地 SQLite 已保存 1 个真实 GitHub 用户和绑定仓库 `sunnier-glad/life-deadline-radar`。
 - 已调用真实 GitHub 同步：PR 0、失败 Workflow 0、Release 0；这是仓库当前真实状态，不是演示数据或同步异常。
@@ -66,6 +71,6 @@
 
 ## 下一步
 
-1. 用户刷新 `http://localhost:5174/`，确认 OAuth 修复后不再落到 API 404。
-2. 若需要验证非零真实数据，在绑定仓库创建真实 PR、GitHub Actions 运行和 Release 后重新同步。
-3. 下一阶段实现 Release Notes 前端编辑器，提供版本输入、生成、保存和来源 PR 查看。
+1. 用户刷新 `http://localhost:5174/`，进入“Release 质量”查看草稿编辑器。
+2. 当前真实仓库没有已合并 PR；若要验证非零来源列表，需要先在 GitHub 合并真实 PR，再同步仓库并重新生成草稿。
+3. 下一阶段可实现 AI 润色建议（保留人工确认）或 Release 发布前检查清单；仍不自动发布。

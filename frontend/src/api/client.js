@@ -27,3 +27,14 @@ export const getPullRequests = (repositoryId) => request(`/api/repositories/${re
 export const getFailedWorkflows = (repositoryId) => request(`/api/repositories/${repositoryId}/ci/failures`)
 export const getReleases = (repositoryId) => request(`/api/repositories/${repositoryId}/releases`)
 export const getQualityGate = (repositoryId) => request(`/api/repositories/${repositoryId}/quality-gate`)
+export const getReleaseNoteDraft = (repositoryId) => request(`/api/repositories/${repositoryId}/release-notes/draft`)
+export const generateReleaseNoteDraft = (repositoryId, version) => request(`/api/repositories/${repositoryId}/release-notes/draft`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ version }),
+})
+export const saveReleaseNoteDraft = (repositoryId, content) => request(`/api/repositories/${repositoryId}/release-notes/draft`, {
+  method: 'PUT',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ content }),
+})

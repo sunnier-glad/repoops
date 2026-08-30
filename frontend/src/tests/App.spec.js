@@ -9,7 +9,7 @@ const qualityGate = {
   checks: [
     { key: 'default_branch_ci', status: 'warning', title: '主分支 CI', detail: '尚未同步到 main 分支的 CI 记录', url: null },
     { key: 'open_pull_requests', status: 'pass', title: '待处理 PR', detail: '没有待处理的开放 PR', url: null },
-    { key: 'release_notes', status: 'warning', title: '发布说明', detail: '尚无 Release 记录，首次发布前需要准备发布说明', url: null },
+    { key: 'release_notes', status: 'warning', title: '发布说明', detail: '尚未生成 Release Notes 草稿', url: null },
   ],
 }
 
@@ -129,6 +129,7 @@ describe('RepoOps app shell', () => {
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => [{ workflow_name: 'CI', conclusion: 'failure', branch: 'main', html_url: 'https://example.test/run/21' }] })
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => [{ tag_name: 'v1.0.0', name: 'First release', html_url: 'https://example.test/release/31' }] })
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => qualityGate })
+      .mockResolvedValueOnce({ ok: false, status: 404, json: async () => ({ detail: 'Release Notes 草稿不存在' }) })
     vi.stubGlobal('fetch', fetchMock)
 
     const wrapper = mount(App)
@@ -140,7 +141,71 @@ describe('RepoOps app shell', () => {
 
     const releaseNav = wrapper.findAll('button.nav-item').find(button => button.text().includes('Release 质量'))
     await releaseNav.trigger('click')
+    await flushPromises()
     expect(wrapper.get('[data-testid="detail-view"]').text()).toContain('First release')
     expect(wrapper.get('[data-testid="detail-view"]').text()).toContain('v1.0.0')
+  })
+
+  it('generates, edits, and saves a traceable release notes draft', async () => {
+    const generatedDraft = {
+      id: 4,
+      repository_id: 7,
+      version: 'v1.2.0',
+      content: '# v1.2.0\n\n- [#12](https://example.test/pr/12) Improve docs',
+      source_pr_count: 1,
+      sources: [{ number: 12, title: 'Improve docs', author_login: 'octocat', html_url: 'https://example.test/pr/12' }],
+      based_on_release: { id: 2, tag_name: 'v1.1.0', published_at: '2026-08-01T00:00:00Z' },
+    }
+    const readyGate = {
+      ...qualityGate,
+      checks: qualityGate.checks.map(check => check.key === 'release_notes'
+        ? { ...check, status: 'pass', detail: 'Release Notes 草稿已准备完成' }
+        : check),
+    }
+    const savedContent = '# v1.2.0\n\n## 变更内容\n\n- 完善文档'
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ id: 1, github_login: 'sunnier-glad' }) })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => [{ id: 7, full_name: 'octocat/demo', webhook_configured: false }] })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ pull_requests: 0, failed_workflows: 0, releases: 0 }) })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => [] })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => [] })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => [] })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => qualityGate })
+      .mockResolvedValueOnce({ ok: false, status: 404, json: async () => ({ detail: 'Release Notes 草稿不存在' }) })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => generatedDraft })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => readyGate })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ ...generatedDraft, content: savedContent }) })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => readyGate })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const wrapper = mount(App)
+    await flushPromises()
+    const releaseNav = wrapper.findAll('button.nav-item').find(button => button.text().includes('Release 质量'))
+    await releaseNav.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="release-notes-editor"]').text()).toContain('尚未生成草稿')
+    await wrapper.get('[data-testid="release-version"]').setValue('v1.2.0')
+    await wrapper.get('[data-testid="generate-release-notes"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="release-notes-content"]').element.value).toContain('# v1.2.0')
+    expect(wrapper.get('[data-testid="release-notes-editor"]').text()).toContain('1 个来源 PR')
+    expect(wrapper.get('[data-testid="release-notes-editor"]').text()).toContain('Improve docs')
+    expect(wrapper.get('a[href="https://example.test/pr/12"]').text()).toContain('#12')
+
+    await wrapper.get('[data-testid="release-notes-content"]').setValue(savedContent)
+    await wrapper.get('[data-testid="save-release-notes"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="release-notes-editor"]').text()).toContain('草稿已保存')
+    expect(fetchMock).toHaveBeenNthCalledWith(9, '/api/repositories/7/release-notes/draft', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ version: 'v1.2.0' }),
+    }))
+    expect(fetchMock).toHaveBeenNthCalledWith(11, '/api/repositories/7/release-notes/draft', expect.objectContaining({
+      method: 'PUT',
+      body: JSON.stringify({ content: savedContent }),
+    }))
   })
 })
