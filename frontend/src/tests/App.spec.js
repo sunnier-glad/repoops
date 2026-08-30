@@ -109,4 +109,27 @@ describe('RepoOps app shell', () => {
     expect(wrapper.text()).toContain('演示 CI')
     expect(wrapper.text()).toContain('演示 Release')
   })
+
+  it('opens detail views from navigation and quality card actions', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ id: 1, github_login: 'sunnier-glad' }) })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => [{ id: 7, full_name: 'octocat/demo', webhook_configured: false }] })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ pull_requests: 1, failed_workflows: 1, releases: 1 }) })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => [{ number: 3, title: 'Improve docs', state: 'open', head_branch: 'docs', html_url: 'https://example.test/pr/3' }] })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => [{ workflow_name: 'CI', conclusion: 'failure', branch: 'main', html_url: 'https://example.test/run/21' }] })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => [{ tag_name: 'v1.0.0', name: 'First release', html_url: 'https://example.test/release/31' }] })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const wrapper = mount(App)
+    await flushPromises()
+
+    await wrapper.get('[data-testid="metric-pr"] button').trigger('click')
+    expect(wrapper.get('[data-testid="detail-view"]').text()).toContain('Improve docs')
+    expect(wrapper.get('[data-testid="detail-view"]').text()).toContain('开放 PR')
+
+    const releaseNav = wrapper.findAll('button.nav-item').find(button => button.text().includes('Release 质量'))
+    await releaseNav.trigger('click')
+    expect(wrapper.get('[data-testid="detail-view"]').text()).toContain('First release')
+    expect(wrapper.get('[data-testid="detail-view"]').text()).toContain('v1.0.0')
+  })
 })
