@@ -1,23 +1,22 @@
-# RepoOps 演示脚本
+# RepoOps 真实数据联调脚本
 
 ## 启动
 
 1. 复制 `.env.example` 为 `.env`，填写 GitHub OAuth、Session Secret 和 Fernet 密钥。
 2. 启动 `docker compose up -d --build`。
 3. 打开 `http://localhost:5174`，点击 GitHub 登录。
-4. 登录后在“选择工作仓库”面板选择并绑定一个测试仓库，再在 GitHub Webhook 设置中确认回调地址可达。
+4. 登录后在“选择工作仓库”面板选择并绑定真实仓库，再点击“同步仓库数据”。
 
-本地演示时可将 `GITHUB_WEBHOOK_ENABLED=false`，这样绑定会保留仓库但跳过远程 Webhook 注册，界面会显示“Webhook 待配置”。如果测试仓库没有 PR、CI 或 Release，可点击“加载本地演示数据”展示完整质量闭环；演示记录带有明确标记，并可点击“清除演示数据”。要接收真实 GitHub 事件，生产环境必须改为 `true`，并将 `GITHUB_WEBHOOK_BASE_URL` 设置为公网 HTTPS 地址。
+本机开发可将 `GITHUB_WEBHOOK_ENABLED=false`，绑定会保存仓库并通过 GitHub API 手动同步真实数据。要接收真实 GitHub Webhook，必须将开关设为 `true`，并把 `GITHUB_WEBHOOK_BASE_URL` 设置为 GitHub 可访问的公网 HTTPS 地址；`localhost` 不能作为 GitHub 回调地址。
 
-## 演示顺序
+## 联调顺序
 
 1. 展示 OAuth 登录后 `/api/auth/me` 只返回用户标识，不返回 access token。
 2. 选择一个可访问仓库，说明绑定前会重新调用 GitHub `/user/repos` 校验权限。
-3. 若仓库为空，先加载本地演示数据，展示 PR、失败 CI、Release 和质量指标；说明这些记录不会伪装成 GitHub 事件。
-4. 推送一次提交，展示 Webhook 返回 202、delivery ID 入库和异步任务。
-5. 打开一个 PR，展示 PR 状态和摘要任务；重复发送同一个 delivery，展示不产生重复数据。
-6. 触发一次失败 CI，展示失败列表、Workflow Run 状态和 AI 解释失败时的独立错误状态。
-7. 发布一个测试 Release，展示版本记录和 Release Notes 草稿；强调不会自动发布回 GitHub。
+3. 在 GitHub 创建真实 PR，点击“同步仓库数据”，确认 PR 出现在协作列表。
+4. 触发一次真实 CI 失败，确认失败 Workflow 出现在失败任务列表。
+5. 发布一个真实 Release，确认版本记录出现在 Release 列表。
+6. 若开启 Webhook，推送提交、更新 PR 或发布 Release 后检查事件流和异步任务；重复 delivery 不产生重复数据。
 
 ## 面试时的主线
 

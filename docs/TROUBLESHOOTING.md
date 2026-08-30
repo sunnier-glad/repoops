@@ -32,11 +32,11 @@
 ## 绑定仓库提示 Validation Failed
 
 - GitHub 仓库列表能加载但绑定失败，通常是 `GITHUB_WEBHOOK_BASE_URL` 使用了 `localhost`，GitHub 无法验证本机 Webhook 地址。
-- 本地演示将 `GITHUB_WEBHOOK_ENABLED=false`，绑定仍会保存仓库，但不会注册远程 Webhook，状态显示为“Webhook 待配置”。
+- 本机真实数据联调可将 `GITHUB_WEBHOOK_ENABLED=false`，绑定仍会保存仓库，但不会注册远程 Webhook；页面通过“同步仓库数据”拉取 GitHub 真实记录。
 - 生产环境将该开关设为 `true`，并使用公网 HTTPS 地址；修改 `.env` 后执行 `docker compose up -d`。
 
 ## 同步完成但所有指标为 0
 
 - 先确认 GitHub 仓库确实存在开放 PR、Workflow Run 或 Release；空仓库返回 0 是正常结果。
-- 若只需要本地展示完整流程，在仓库面板点击“加载本地演示数据”；演示数据带有本地标记，不会发送到 GitHub。
-- 演示结束后可点击“清除演示数据”；生产环境不允许加载或清除演示数据。
+- 在 GitHub 产生真实 PR、CI 或 Release 后，回到 RepoOps 点击“同步仓库数据”。页面不会生成或加载演示记录。
+- 若需要实时更新，检查 Webhook 是否开启、回调地址是否为公网 HTTPS，以及 GitHub Webhook delivery 是否返回 202。

@@ -84,7 +84,7 @@ describe('RepoOps app shell', () => {
     expect(wrapper.text()).not.toContain('当前 GitHub 账号没有可绑定的仓库。')
   })
 
-  it('loads local demo data into the quality workspace', async () => {
+  it('keeps an empty real repository free of demo-data controls', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ id: 1, github_login: 'sunnier-glad' }) })
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => [{ id: 7, full_name: 'octocat/demo', webhook_configured: false }] })
@@ -92,22 +92,15 @@ describe('RepoOps app shell', () => {
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => [] })
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => [] })
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => [] })
-      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ demo: true, pull_requests: 1, failed_workflows: 1, releases: 1 }) })
-      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ pull_requests: 1, failed_workflows: 1, releases: 1 }) })
-      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => [{ number: 999001, title: '演示 PR', state: 'open' }] })
-      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => [{ workflow_name: '演示 CI', conclusion: 'failure' }] })
-      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => [{ tag_name: 'demo-v1.0.0', name: '演示 Release' }] })
     vi.stubGlobal('fetch', fetchMock)
 
     const wrapper = mount(App)
     await flushPromises()
-    await wrapper.get('[data-testid="load-demo-data"]').trigger('click')
-    await flushPromises()
 
-    expect(wrapper.get('[data-testid="sync-status"]').text()).toContain('演示数据已加载')
-    expect(wrapper.text()).toContain('演示 PR')
-    expect(wrapper.text()).toContain('演示 CI')
-    expect(wrapper.text()).toContain('演示 Release')
+    expect(wrapper.text()).toContain('等待 GitHub 数据')
+    expect(wrapper.text()).toContain('同步仓库数据')
+    expect(wrapper.text()).not.toContain('演示')
+    expect(wrapper.text()).not.toContain('加载本地演示数据')
   })
 
   it('opens detail views from navigation and quality card actions', async () => {

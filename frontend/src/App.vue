@@ -8,8 +8,6 @@ import {
   getPullRequests,
   getReleases,
   getSession,
-  loadDemoData as requestDemoData,
-  clearDemoData as requestClearDemoData,
   syncRepository,
 } from './api/client'
 
@@ -27,7 +25,6 @@ const syncError = ref('')
 const pullRequests = ref([])
 const failedWorkflows = ref([])
 const releases = ref([])
-const demoMode = ref(false)
 
 const navItems = [
   { id: 'overview', label: '质量总览', icon: '⌁' },
@@ -121,40 +118,9 @@ async function loadQualityData() {
     pullRequests.value = pullRequestData
     failedWorkflows.value = workflowData
     releases.value = releaseData
-    demoMode.value = [...pullRequestData, ...workflowData, ...releaseData].some(item => item.is_demo)
     syncStatus.value = '同步完成'
   } catch (error) {
     syncStatus.value = '同步失败'
-    syncError.value = error.message
-  }
-}
-
-async function handleLoadDemoData() {
-  if (!boundRepository.value) return
-  syncStatus.value = '正在加载演示数据…'
-  syncError.value = ''
-  try {
-    await requestDemoData(boundRepository.value.id)
-    await loadQualityData()
-    demoMode.value = true
-    syncStatus.value = '演示数据已加载'
-  } catch (error) {
-    syncStatus.value = '演示数据加载失败'
-    syncError.value = error.message
-  }
-}
-
-async function handleClearDemoData() {
-  if (!boundRepository.value) return
-  syncStatus.value = '正在清除演示数据…'
-  syncError.value = ''
-  try {
-    await requestClearDemoData(boundRepository.value.id)
-    await loadQualityData()
-    demoMode.value = false
-    syncStatus.value = '演示数据已清除'
-  } catch (error) {
-    syncStatus.value = '演示数据清除失败'
     syncError.value = error.message
   }
 }
@@ -231,9 +197,7 @@ onMounted(async () => {
         </div>
         <div v-if="boundRepository" class="sync-toolbar">
           <span data-testid="sync-status">{{ syncStatus || '尚未同步' }}</span>
-          <span v-if="demoMode" class="demo-badge">本地演示数据</span>
           <button class="text-button" type="button" :disabled="syncStatus === '正在同步…'" @click="loadQualityData">同步仓库数据 ↻</button>
-          <button v-if="demoMode" class="text-button danger-button" type="button" @click="handleClearDemoData">清除演示数据</button>
         </div>
         <div v-else class="repository-picker">
           <select v-model="selectedRepository" aria-label="选择 GitHub 仓库" :disabled="repositoryLoading || !availableRepositories.length">
@@ -269,7 +233,7 @@ onMounted(async () => {
                 <span class="activity-label">{{ activity.label }}</span><span class="activity-title">{{ activity.title }}</span><span class="activity-detail">{{ activity.detail }}</span><span>↗</span>
               </a>
             </div>
-            <div v-else class="empty-state"><div class="empty-icon">⌁</div><strong>{{ boundRepository ? '暂无仓库数据' : '还没有 GitHub 事件' }}</strong><p>{{ boundRepository ? '该仓库暂时没有 PR、CI 或 Release，可加载本地演示数据查看完整流程。' : '先选择并绑定一个仓库，再接收 push、PR、CI 和 release。' }}</p><button v-if="boundRepository" data-testid="load-demo-data" class="empty-link" type="button" @click="handleLoadDemoData">加载本地演示数据 <span>↗</span></button><button v-else class="empty-link" type="button" @click="document.getElementById('repository-panel')?.scrollIntoView({ behavior: 'smooth' })">选择仓库 <span>↗</span></button></div>
+            <div v-else class="empty-state"><div class="empty-icon">⌁</div><strong>{{ boundRepository ? '等待 GitHub 数据' : '还没有 GitHub 事件' }}</strong><p>{{ boundRepository ? '当前仓库还没有 PR、CI 或 Release；在 GitHub 产生真实事件后点击“同步仓库数据”。' : '先选择并绑定一个仓库，再接收 push、PR、CI 和 release。' }}</p><button class="empty-link" type="button" @click="document.getElementById('repository-panel')?.scrollIntoView({ behavior: 'smooth' })">选择仓库 <span>↗</span></button></div>
             <p v-if="syncError" class="repository-error" role="alert">{{ syncError }}</p>
           </article>
           <article class="panel playbook-panel">
@@ -298,14 +262,14 @@ onMounted(async () => {
                 <strong v-if="activeView === 'pull-requests'">{{ item.title }}</strong>
                 <strong v-else-if="activeView === 'ci'">{{ item.workflow_name }}</strong>
                 <strong v-else>{{ item.name || item.tag_name }}</strong>
-                <p v-if="activeView === 'pull-requests'">{{ item.head_branch || '默认分支' }} · {{ item.is_demo ? '本地演示' : 'GitHub 同步' }}</p>
-                <p v-else-if="activeView === 'ci'">{{ item.branch || '未知分支' }} · {{ item.conclusion || '失败' }} · {{ item.is_demo ? '本地演示' : 'GitHub 同步' }}</p>
-                <p v-else>{{ item.tag_name }} · {{ item.is_demo ? '本地演示' : 'GitHub 同步' }}</p>
+                <p v-if="activeView === 'pull-requests'">{{ item.head_branch || '默认分支' }} · GitHub 同步</p>
+                <p v-else-if="activeView === 'ci'">{{ item.branch || '未知分支' }} · {{ item.conclusion || '失败' }} · GitHub 同步</p>
+                <p v-else>{{ item.tag_name }} · GitHub 同步</p>
               </div>
               <span class="detail-status">{{ activeView === 'pull-requests' ? '开放 PR' : activeView === 'ci' ? '失败' : '发布记录' }} ↗</span>
             </a>
           </div>
-          <div v-else class="empty-state"><div class="empty-icon">⌁</div><strong>暂无{{ detailConfig.title }}</strong><p>{{ boundRepository ? '当前仓库还没有对应数据，先同步仓库或加载本地演示数据。' : '先绑定一个 GitHub 仓库，再查看质量详情。' }}</p><button v-if="boundRepository" class="empty-link" type="button" @click="activeView = 'overview'">返回总览 <span>↩</span></button></div>
+          <div v-else class="empty-state"><div class="empty-icon">⌁</div><strong>暂无{{ detailConfig.title }}</strong><p>{{ boundRepository ? '当前仓库还没有对应 GitHub 数据，请先在 GitHub 产生对应事件，再同步仓库。' : '先绑定一个 GitHub 仓库，再查看质量详情。' }}</p><button v-if="boundRepository" class="empty-link" type="button" @click="activeView = 'overview'">返回总览 <span>↩</span></button></div>
         </article>
       </section>
     </main>
@@ -323,7 +287,7 @@ onMounted(async () => {
 .sidebar-note { margin: auto 12px 25px; padding: 17px 0; border-top: 1px solid #233335; border-bottom: 1px solid #233335; }.sidebar-note p { color: #829795; font-size: 12px; line-height: 1.8; margin: 12px 0 0; }.sidebar-footer, .updated-label { display: flex; gap: 8px; align-items: center; color: #76908d; font-size: 11px; }.status-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #8debc9; box-shadow: 0 0 0 4px rgba(141, 235, 201, .1); }
 .main-content { flex: 1; max-width: 1430px; padding: 42px clamp(24px, 5vw, 76px) 60px; margin: 0 auto; }.topbar { display: flex; justify-content: space-between; gap: 30px; align-items: flex-start; } h1, h2, p { margin-top: 0; } h1 { margin: 9px 0 8px; font-size: clamp(27px, 3.2vw, 44px); letter-spacing: -.055em; line-height: 1.1; } h2 { margin: 8px 0 0; font-size: 19px; letter-spacing: -.03em; }.page-subtitle { color: #849a98; font-size: 13px; }.topbar-actions { display: flex; align-items: center; gap: 12px; padding-top: 16px; }.version-pill, .user-pill { border: 1px solid #2b4141; border-radius: 99px; color: #8ca09e; padding: 8px 12px; font: 10px 'DM Mono', monospace; }.login-button { border: 1px solid #8debc9; border-radius: 8px; padding: 10px 15px; color: #071313; background: #8debc9; font-size: 12px; font-weight: 800; }.login-button span, .empty-state a span { margin-left: 9px; }.user-pill { color: #8debc9; }
 .workspace-banner { position: relative; overflow: hidden; display: flex; justify-content: space-between; align-items: center; min-height: 194px; margin-top: 48px; padding: 30px 34px; border: 1px solid #294345; border-radius: 15px; background: linear-gradient(110deg, #14292b, #122124 60%, #18383a); }.workspace-banner h2 { font-size: 24px; max-width: 480px; }.workspace-banner p { color: #94aaa7; font-size: 13px; margin: 13px 0 0; }.workspace-orbit { position: relative; width: 160px; height: 130px; margin-right: 45px; }.orbit-core { position: absolute; z-index: 2; inset: 45px 55px; display: grid; place-items: center; border-radius: 50%; background: #8debc9; color: #081314; font: 700 13px 'DM Mono', monospace; }.orbit-ring { position: absolute; border: 1px solid rgba(141, 235, 201, .4); border-radius: 50%; transform: rotate(-20deg); }.ring-one { width: 150px; height: 58px; top: 33px; left: 5px; }.ring-two { width: 130px; height: 85px; top: 20px; left: 15px; transform: rotate(52deg); }
-.repository-panel { margin-top: 15px; padding: 22px 24px; border: 1px solid #294345; border-radius: 13px; background: #101c1e; }.repository-status { color: #8debc9; font: 11px 'DM Mono', monospace; }.repository-picker { display: flex; gap: 12px; margin-top: 20px; }.repository-picker select { flex: 1; min-width: 0; border: 1px solid #345153; border-radius: 8px; padding: 12px 14px; color: #dcebe7; background: #0b1517; }.repository-picker button { border: 0; border-radius: 8px; padding: 0 18px; color: #071313; background: #8debc9; font-size: 12px; font-weight: 800; cursor: pointer; }.repository-picker button:disabled { cursor: not-allowed; opacity: .45; }.repository-bound-state { display: flex; justify-content: space-between; gap: 16px; margin-top: 20px; color: #8debc9; font-size: 13px; }.repository-bound-state span, .repository-hint, .repository-error { color: #819997; font-size: 12px; }.repository-error { color: #fb9b8a; }.repository-refresh { margin-top: 15px; padding: 0; }.sync-toolbar { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 12px; align-items: center; margin-top: 15px; color: #8debc9; font-size: 11px; }.sync-toolbar > span:first-child { margin-right: auto; }.sync-toolbar button:disabled { opacity: .5; cursor: not-allowed; }.demo-badge { border: 1px solid #8debc9; border-radius: 99px; padding: 4px 8px; color: #8debc9; font-size: 10px; }.danger-button { color: #fb9b8a; }.empty-link { border: 0; color: #8debc9; background: transparent; cursor: pointer; font-size: 12px; font-weight: 700; }
+.repository-panel { margin-top: 15px; padding: 22px 24px; border: 1px solid #294345; border-radius: 13px; background: #101c1e; }.repository-status { color: #8debc9; font: 11px 'DM Mono', monospace; }.repository-picker { display: flex; gap: 12px; margin-top: 20px; }.repository-picker select { flex: 1; min-width: 0; border: 1px solid #345153; border-radius: 8px; padding: 12px 14px; color: #dcebe7; background: #0b1517; }.repository-picker button { border: 0; border-radius: 8px; padding: 0 18px; color: #071313; background: #8debc9; font-size: 12px; font-weight: 800; cursor: pointer; }.repository-picker button:disabled { cursor: not-allowed; opacity: .45; }.repository-bound-state { display: flex; justify-content: space-between; gap: 16px; margin-top: 20px; color: #8debc9; font-size: 13px; }.repository-bound-state span, .repository-hint, .repository-error { color: #819997; font-size: 12px; }.repository-error { color: #fb9b8a; }.repository-refresh { margin-top: 15px; padding: 0; }.sync-toolbar { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 12px; align-items: center; margin-top: 15px; color: #8debc9; font-size: 11px; }.sync-toolbar > span:first-child { margin-right: auto; }.sync-toolbar button:disabled { opacity: .5; cursor: not-allowed; }.empty-link { border: 0; color: #8debc9; background: transparent; cursor: pointer; font-size: 12px; font-weight: 700; }
 .section-heading, .panel-heading { display: flex; justify-content: space-between; align-items: flex-end; gap: 20px; }.section-heading { margin: 46px 0 17px; }.quality-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; }.quality-card { min-height: 176px; display: flex; flex-direction: column; padding: 20px; border: 1px solid #263b3d; border-radius: 13px; background: #101c1e; }.quality-card.danger { border-top: 2px solid #fb8c78; }.quality-card.accent { border-top: 2px solid #8dbae9; }.quality-card.success { border-top: 2px solid #8debc9; }.card-topline, .card-footer { display: flex; justify-content: space-between; color: #839997; font-size: 12px; }.card-arrow { color: #8debc9; }.card-value { margin: 25px 0 auto; color: #eff9f5; font-size: 43px; letter-spacing: -.08em; }.card-footer { padding-top: 14px; border-top: 1px solid #233335; font-size: 10px; }.card-footer span:last-child { color: #aac0bc; }.card-action { border: 0; padding: 0; color: #aac0bc; background: transparent; cursor: pointer; font-size: 10px; }.card-action:hover { color: #8debc9; }
 .lower-grid { display: grid; grid-template-columns: 1.35fr 1fr; gap: 15px; margin-top: 15px; }.panel { min-height: 320px; padding: 23px; border: 1px solid #263b3d; border-radius: 13px; background: #101a1c; }.text-button { border: 0; color: #8debc9; background: transparent; cursor: pointer; font-size: 11px; }.empty-state { min-height: 240px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }.empty-icon { display: grid; place-items: center; width: 41px; height: 41px; margin-bottom: 15px; border: 1px solid #426462; border-radius: 50%; color: #8debc9; font-size: 23px; }.empty-state strong { font-size: 14px; }.empty-state p { max-width: 320px; margin: 8px 0 18px; color: #78908d; font-size: 12px; line-height: 1.7; }.empty-state a { color: #8debc9; font-size: 12px; font-weight: 700; }.activity-list { display: grid; gap: 0; margin-top: 18px; }.activity-row { display: grid; grid-template-columns: 68px minmax(0, 1fr) auto 18px; align-items: center; gap: 10px; padding: 13px 0; border-bottom: 1px solid #243638; color: #dcebe7; font-size: 12px; }.activity-label { color: #8debc9; font: 10px 'DM Mono', monospace; }.activity-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.activity-detail { color: #78908d; font-size: 11px; }.playbook-list { padding: 6px 0 0; margin: 0; list-style: none; }.playbook-list li { display: flex; gap: 16px; padding: 17px 0; border-bottom: 1px solid #243638; }.playbook-list li:last-child { border-bottom: 0; }.playbook-list li > span { color: #5e7b77; font: 11px 'DM Mono', monospace; }.playbook-list strong { font-size: 12px; }.playbook-list p { margin: 5px 0 0; color: #78908d; font-size: 11px; line-height: 1.6; }.detail-heading { align-items: flex-start; }.detail-heading p { max-width: 560px; margin: 8px 0 0; color: #78908d; font-size: 12px; line-height: 1.7; }.detail-panel { min-height: 320px; }.detail-list { display: grid; }.detail-row { display: grid; grid-template-columns: 78px minmax(0, 1fr) auto; align-items: center; gap: 18px; padding: 20px 0; border-bottom: 1px solid #243638; }.detail-row:last-child { border-bottom: 0; }.detail-kicker { color: #8debc9; font: 11px 'DM Mono', monospace; }.detail-main { min-width: 0; }.detail-main strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }.detail-main p { margin: 6px 0 0; color: #78908d; font-size: 11px; }.detail-status { color: #aac0bc; font-size: 11px; white-space: nowrap; }
 @media (max-width: 900px) { .sidebar { width: 190px; }.workspace-orbit { margin-right: 0; transform: scale(.8); }.lower-grid { grid-template-columns: 1fr; } }
