@@ -13,7 +13,11 @@ def github_login(request: Request) -> RedirectResponse:
     service = request.app.state.oauth_service
     if service is None:
         raise HTTPException(status_code=503, detail="GitHub OAuth 尚未配置")
-    return RedirectResponse(service.build_authorize_url())
+    return RedirectResponse(
+        service.build_authorize_url(
+            return_to=request.app.state.settings.frontend_url
+        )
+    )
 
 
 @router.get("/github/callback")

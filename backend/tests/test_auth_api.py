@@ -28,6 +28,7 @@ def make_client(tmp_path):
         database_url=f"sqlite+pysqlite:///{tmp_path / 'repoops.db'}",
         github_client_id="client-id",
         github_redirect_uri="http://testserver/api/auth/github/callback",
+        frontend_url="http://frontend.test/",
         session_secret="test-session-secret",
     )
     return TestClient(create_app(settings=settings, github_client=FakeGitHubOAuthClient()))
@@ -56,7 +57,7 @@ def test_github_callback_creates_session_and_current_user(tmp_path):
     )
 
     assert callback.status_code == 303
-    assert callback.headers["location"] == "/"
+    assert callback.headers["location"] == "http://frontend.test/"
     current_user = client.get("/api/auth/me")
     assert current_user.status_code == 200
     assert current_user.json()["github_login"] == "octocat"

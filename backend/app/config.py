@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     github_client_id: str = ""
     github_client_secret: str = ""
     github_redirect_uri: str = "http://localhost:8000/api/auth/github/callback"
+    frontend_url: str = "http://localhost:5174/"
     github_webhook_base_url: str = "http://localhost:8000"
     github_webhook_enabled: bool = True
     github_token_encryption_key: str = ""
