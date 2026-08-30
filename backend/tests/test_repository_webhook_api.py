@@ -155,6 +155,14 @@ def test_sync_endpoint_imports_current_github_quality_data(tmp_path):
     assert client.get(f"/api/repositories/{repository['id']}/pull-requests").json()[0]["number"] == 3
     assert client.get(f"/api/repositories/{repository['id']}/ci/failures").json()[0]["workflow_name"] == "CI"
     assert client.get(f"/api/repositories/{repository['id']}/releases").json()[0]["tag_name"] == "v1.0.0"
+    quality_gate = client.get(f"/api/repositories/{repository['id']}/quality-gate")
+    assert quality_gate.status_code == 200
+    assert quality_gate.json()["status"] == "blocked"
+    assert [item["key"] for item in quality_gate.json()["checks"]] == [
+        "default_branch_ci",
+        "open_pull_requests",
+        "release_notes",
+    ]
 
     with client.repoops_app.state.session_factory() as session:
         assert session.query(PullRequest).count() == 1

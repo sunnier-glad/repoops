@@ -9,6 +9,7 @@ from app.github.client import GitHubApiError
 from app.github.demo import clear_demo_data, load_demo_data
 from app.github.service import bind_repository, list_available_repositories
 from app.github.sync import sync_repository_data
+from app.quality.service import evaluate_release_quality
 
 
 class BindRepositoryRequest(BaseModel):
@@ -142,6 +143,14 @@ def releases(request: Request, repository_id: int) -> list[dict[str, object]]:
             }
             for item in items
         ]
+
+
+@router.get("/{repository_id}/quality-gate")
+def quality_gate(request: Request, repository_id: int) -> dict[str, object]:
+    user = get_current_user(request)
+    with request.app.state.session_factory() as session:
+        repository = _require_owned_repository(session, repository_id, user.id)
+        return evaluate_release_quality(session, repository).as_dict()
 
 
 @router.post("/{repository_id}/demo-data")

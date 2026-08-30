@@ -27,6 +27,11 @@
   - 后端使用 `sqlite+pysqlite:///./repoops-local.db`，`CELERY_ENABLED=false`。
   - API 启动 PID 42468，Web 启动 PID 39900；实际子进程 PID 需重新查询端口确认。
   - 日志位于 `%LOCALAPPDATA%\Temp\repoops-api.*.log` 和 `repoops-web.*.log`。
+- 已实现发布质量门禁后端：`GET /api/repositories/{id}/quality-gate`。
+  - 主分支最新 CI 失败为 `blocked`。
+  - CI 缺失/运行中、存在开放 PR、无 Release 或发布说明为空为 `warning`。
+  - 全部检查通过为 `ready`；每项返回可解释证据和可选原始链接。
+  - 门禁查询过滤 `is_demo=true` 数据，不依赖 AI，不自动发布。
 
 ## 用户原有改动
 
@@ -39,6 +44,7 @@
 - 真实 GitHub OAuth 已到达回调并成功创建会话，但原实现回调到 API 根路径 `/`，导致 `GET /` 404。
 - 已新增受控 `FRONTEND_URL` 配置，OAuth state 记录该地址，回调后返回 `http://localhost:5174/`；涉及 `config.py`、OAuth 路由、环境模板、Compose 和测试。
 - OAuth 回归测试 5/5 通过，Ruff 通过；API 已重启并再次通过健康检查。
+- 门禁及仓库 API 回归测试 10/10 通过，相关 Ruff 检查通过。
 - 本地 SQLite 已保存 1 个真实 GitHub 用户和绑定仓库 `sunnier-glad/life-deadline-radar`。
 - 已调用真实 GitHub 同步：PR 0、失败 Workflow 0、Release 0；这是仓库当前真实状态，不是演示数据或同步异常。
 - OAuth 完成后：同步真实仓库，验证 PR、失败 Workflow 和 Release 详情页；不要创建演示数据。
@@ -49,4 +55,4 @@
 
 1. 用户刷新 `http://localhost:5174/`，确认 OAuth 修复后不再落到 API 404。
 2. 若需要验证非零真实数据，在绑定仓库创建真实 PR、GitHub Actions 运行和 Release 后重新同步。
-3. 真实链路通过后再实现下一项产品功能：发布门禁/质量结论，而不是继续增加 GitHub 原生功能的简单镜像。
+3. 用户确认门禁判定和信息结构后，实现前端门禁面板并接入真实 API。
