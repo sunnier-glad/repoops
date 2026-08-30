@@ -23,8 +23,7 @@ export const bindRepository = (fullName) => request('/api/repositories', {
   body: JSON.stringify({ full_name: fullName }),
 })
 export const syncRepository = (repositoryId) => request(`/api/repositories/${repositoryId}/sync`, { method: 'POST' })
-export const loadDemoData = (repositoryId) => request(`/api/repositories/${repositoryId}/demo-data`, { method: 'POST' })
-export const clearDemoData = (repositoryId) => request(`/api/repositories/${repositoryId}/demo-data`, { method: 'DELETE' })
 export const getPullRequests = (repositoryId) => request(`/api/repositories/${repositoryId}/pull-requests`)
 export const getFailedWorkflows = (repositoryId) => request(`/api/repositories/${repositoryId}/ci/failures`)
 export const getReleases = (repositoryId) => request(`/api/repositories/${repositoryId}/releases`)
+export const getQualityGate = (repositoryId) => request(`/api/repositories/${repositoryId}/quality-gate`)

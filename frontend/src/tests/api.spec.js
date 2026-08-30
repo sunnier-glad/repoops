@@ -5,10 +5,9 @@ import {
   getAvailableRepositories,
   getFailedWorkflows,
   getPullRequests,
+  getQualityGate,
   getReleases,
   getBoundRepositories,
-  loadDemoData,
-  clearDemoData,
   request,
   syncRepository,
 } from '../api/client'
@@ -83,15 +82,20 @@ describe('api client', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/repositories', expect.objectContaining({ credentials: 'include' }))
   })
 
-  it('loads and clears local demo data', async () => {
-    const fetchMock = vi.fn()
-      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ demo: true, pull_requests: 1 }) })
-      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ deleted: 3 }) })
+  it('loads the explainable release quality gate', async () => {
+    const gate = {
+      status: 'warning',
+      summary: '存在发布前需要人工确认的风险',
+      checks: [{ key: 'default_branch_ci', status: 'warning' }],
+    }
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => gate,
+    })
     vi.stubGlobal('fetch', fetchMock)
 
-    await expect(loadDemoData(1)).resolves.toEqual({ demo: true, pull_requests: 1 })
-    await expect(clearDemoData(1)).resolves.toEqual({ deleted: 3 })
-    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/repositories/1/demo-data', expect.objectContaining({ method: 'POST' }))
-    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/repositories/1/demo-data', expect.objectContaining({ method: 'DELETE' }))
+    await expect(getQualityGate(1)).resolves.toEqual(gate)
+    expect(fetchMock).toHaveBeenCalledWith('/api/repositories/1/quality-gate', expect.objectContaining({ credentials: 'include' }))
   })
 })

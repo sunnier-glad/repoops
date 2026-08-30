@@ -3,6 +3,16 @@ import { vi } from 'vitest'
 
 import App from '../App.vue'
 
+const qualityGate = {
+  status: 'warning',
+  summary: '存在发布前需要人工确认的风险',
+  checks: [
+    { key: 'default_branch_ci', status: 'warning', title: '主分支 CI', detail: '尚未同步到 main 分支的 CI 记录', url: null },
+    { key: 'open_pull_requests', status: 'pass', title: '待处理 PR', detail: '没有待处理的开放 PR', url: null },
+    { key: 'release_notes', status: 'warning', title: '发布说明', detail: '尚无 Release 记录，首次发布前需要准备发布说明', url: null },
+  ],
+}
+
 describe('RepoOps app shell', () => {
   it('renders the product name and purpose', () => {
     const wrapper = mount(App)
@@ -25,6 +35,7 @@ describe('RepoOps app shell', () => {
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => [] })
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => [] })
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => [] })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => qualityGate })
     vi.stubGlobal('fetch', fetchMock)
 
     const wrapper = mount(App)
@@ -53,6 +64,7 @@ describe('RepoOps app shell', () => {
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => [{ number: 3, title: 'Improve docs', state: 'open', html_url: 'https://example.test/pr/3' }] })
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => [{ workflow_name: 'CI', conclusion: 'failure', html_url: 'https://example.test/run/21' }] })
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => [{ tag_name: 'v1.0.0', name: 'First release', html_url: 'https://example.test/release/31' }] })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => qualityGate })
     vi.stubGlobal('fetch', fetchMock)
 
     const wrapper = mount(App)
@@ -66,6 +78,9 @@ describe('RepoOps app shell', () => {
     expect(wrapper.get('[data-testid="metric-release"]').text()).toContain('1')
     expect(wrapper.text()).toContain('Improve docs')
     expect(wrapper.text()).toContain('First release')
+    expect(wrapper.get('[data-testid="release-gate"]').text()).toContain('需要确认')
+    expect(wrapper.get('[data-testid="gate-check-default_branch_ci"]').text()).toContain('主分支 CI')
+    expect(fetchMock).toHaveBeenCalledWith('/api/repositories/7/quality-gate', expect.objectContaining({ credentials: 'include' }))
   })
 
   it('does not show the available-repository empty hint after a repository is bound', async () => {
@@ -76,6 +91,7 @@ describe('RepoOps app shell', () => {
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => [] })
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => [] })
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => [] })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => qualityGate })
     vi.stubGlobal('fetch', fetchMock)
 
     const wrapper = mount(App)
@@ -92,6 +108,7 @@ describe('RepoOps app shell', () => {
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => [] })
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => [] })
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => [] })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => qualityGate })
     vi.stubGlobal('fetch', fetchMock)
 
     const wrapper = mount(App)
@@ -111,6 +128,7 @@ describe('RepoOps app shell', () => {
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => [{ number: 3, title: 'Improve docs', state: 'open', head_branch: 'docs', html_url: 'https://example.test/pr/3' }] })
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => [{ workflow_name: 'CI', conclusion: 'failure', branch: 'main', html_url: 'https://example.test/run/21' }] })
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => [{ tag_name: 'v1.0.0', name: 'First release', html_url: 'https://example.test/release/31' }] })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => qualityGate })
     vi.stubGlobal('fetch', fetchMock)
 
     const wrapper = mount(App)

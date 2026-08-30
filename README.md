@@ -4,7 +4,9 @@ RepoOps 是面向个人开发者和小团队的 GitHub 项目协作与发布质�
 
 ## 当前状态
 
-已完成 MVP 主链路：GitHub OAuth、账号和仓库绑定、Webhook HMAC 校验、delivery 幂等、PR/CI/Release 状态、Celery 任务入口、AI 结构化分析和 Vue 质量工作台。
+已完成 MVP 主链路：GitHub OAuth、账号和仓库绑定、Webhook HMAC 校验、delivery 幂等、PR/CI/Release 状态、可解释发布质量门禁、Celery 任务入口、AI 结构化分析和 Vue 质量工作台。
+
+发布门禁根据真实 GitHub 数据给出“可发布、需要确认、阻塞发布”结论，并逐项展示主分支 CI、开放 PR 和 Release 说明的判断依据。
 
 当前边界：AI 只生成摘要、CI 失败解释和 Release Notes 草稿，不自动改代码、合并 PR、发布版本或部署。
 

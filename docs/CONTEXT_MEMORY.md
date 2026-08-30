@@ -32,6 +32,10 @@
   - CI 缺失/运行中、存在开放 PR、无 Release 或发布说明为空为 `warning`。
   - 全部检查通过为 `ready`；每项返回可解释证据和可选原始链接。
   - 门禁查询过滤 `is_demo=true` 数据，不依赖 AI，不自动发布。
+- 已实现 Vue 发布门禁面板：
+  - 仓库同步后同时读取真实门禁 API。
+  - 展示 `阻塞发布 / 需要确认 / 可以发布`、三项证据和 GitHub 原始链接。
+  - 支持 900px/680px 响应式布局；客户端已移除演示数据 API 导出和旧测试。
 
 ## 用户原有改动
 
@@ -45,6 +49,7 @@
 - 已新增受控 `FRONTEND_URL` 配置，OAuth state 记录该地址，回调后返回 `http://localhost:5174/`；涉及 `config.py`、OAuth 路由、环境模板、Compose 和测试。
 - OAuth 回归测试 5/5 通过，Ruff 通过；API 已重启并再次通过健康检查。
 - 门禁及仓库 API 回归测试 10/10 通过，相关 Ruff 检查通过。
+- 前端 Vitest 12/12 通过，Vite production build 通过；API 健康检查和前端 HTTP 200 通过。
 - 本地 SQLite 已保存 1 个真实 GitHub 用户和绑定仓库 `sunnier-glad/life-deadline-radar`。
 - 已调用真实 GitHub 同步：PR 0、失败 Workflow 0、Release 0；这是仓库当前真实状态，不是演示数据或同步异常。
 - OAuth 完成后：同步真实仓库，验证 PR、失败 Workflow 和 Release 详情页；不要创建演示数据。
@@ -55,4 +60,4 @@
 
 1. 用户刷新 `http://localhost:5174/`，确认 OAuth 修复后不再落到 API 404。
 2. 若需要验证非零真实数据，在绑定仓库创建真实 PR、GitHub Actions 运行和 Release 后重新同步。
-3. 用户确认门禁判定和信息结构后，实现前端门禁面板并接入真实 API。
+3. 下一阶段清理后端残留 demo 路由/服务，并实现真实 Release Notes 草稿工作流。
