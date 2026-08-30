@@ -29,15 +29,19 @@ def test_parse_pull_request_event_extracts_number_and_head():
                 "state": "open",
                 "html_url": "https://github.com/octocat/demo/pull/12",
                 "head": {"ref": "feature/docs", "sha": "def456"},
+                "base": {"ref": "main"},
                 "user": {"login": "octocat"},
+                "merged_at": "2026-08-26T08:00:00Z",
             },
         },
     )
     assert parsed.kind == "pull_request"
     assert parsed.number == 12
     assert parsed.branch == "feature/docs"
+    assert parsed.base_branch == "main"
     assert parsed.commit_sha == "def456"
     assert parsed.title == "Improve docs"
+    assert parsed.merged_at == "2026-08-26T08:00:00Z"
 
 
 def test_parse_workflow_run_event_extracts_conclusion():

@@ -1,4 +1,4 @@
-from app.db.models import Base, PullRequest, Release, Repository, User, WorkflowRun
+from app.db.models import Base, PullRequest, ReleaseNoteDraft, Repository, User, WorkflowRun
 from app.db.session import create_database_engine, create_session_factory
 from app.quality.service import evaluate_release_quality
 
@@ -94,11 +94,12 @@ def test_quality_gate_is_ready_when_all_checks_pass(tmp_path):
                 branch="main",
                 commit_sha="def",
             ),
-            Release(
+            ReleaseNoteDraft(
                 repository_id=repository.id,
-                github_id=30,
-                tag_name="v1.0.0",
-                body="Initial release notes",
+                version="v1.0.0",
+                content="# v1.0.0\n\nInitial release notes\n",
+                source_snapshot_json="[]",
+                source_pr_count=0,
             ),
         ]
     )

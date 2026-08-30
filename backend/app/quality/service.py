@@ -3,7 +3,7 @@ from dataclasses import asdict, dataclass
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.db.models import PullRequest, Release, Repository, WorkflowRun
+from app.db.models import PullRequest, ReleaseNoteDraft, Repository, WorkflowRun
 
 
 @dataclass(frozen=True)
@@ -120,33 +120,26 @@ def _open_pull_requests_check(session: Session, repository: Repository) -> Quali
 
 
 def _release_notes_check(session: Session, repository: Repository) -> QualityCheck:
-    release = session.scalar(
-        select(Release)
-        .where(
-            Release.repository_id == repository.id,
-        )
-        .order_by(Release.github_id.desc())
-        .limit(1)
+    draft = session.scalar(
+        select(ReleaseNoteDraft).where(ReleaseNoteDraft.repository_id == repository.id)
     )
-    if release is None:
+    if draft is None:
         return QualityCheck(
             key="release_notes",
             status="warning",
             title="发布说明",
-            detail="尚无 Release 记录，首次发布前需要准备发布说明",
+            detail="尚未生成 Release Notes 草稿",
         )
-    if release.body and release.body.strip():
+    if draft.content.strip():
         return QualityCheck(
             key="release_notes",
             status="pass",
             title="发布说明",
-            detail=f"最近版本 {release.tag_name} 已包含发布说明",
-            url=release.html_url,
+            detail=f"{draft.version} 草稿已准备，包含 {draft.source_pr_count} 个来源 PR",
         )
     return QualityCheck(
         key="release_notes",
         status="warning",
         title="发布说明",
-        detail=f"最近版本 {release.tag_name} 缺少发布说明",
-        url=release.html_url,
+        detail=f"{draft.version} 草稿内容为空",
     )

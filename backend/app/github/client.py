@@ -94,9 +94,11 @@ class GitHubClient:
                 body=item.get("body"),
                 state=item["state"],
                 head_branch=(item.get("head") or {}).get("ref"),
+                base_branch=(item.get("base") or {}).get("ref"),
                 head_sha=(item.get("head") or {}).get("sha"),
                 author_login=(item.get("user") or {}).get("login"),
                 html_url=item.get("html_url"),
+                merged_at=item.get("merged_at"),
             )
             for item in response.json()
         ]

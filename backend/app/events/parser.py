@@ -7,6 +7,7 @@ class ParsedEvent:
     repository_full_name: str | None = None
     action: str | None = None
     branch: str | None = None
+    base_branch: str | None = None
     commit_sha: str | None = None
     number: int | None = None
     external_id: int | None = None
@@ -16,6 +17,7 @@ class ParsedEvent:
     conclusion: str | None = None
     tag_name: str | None = None
     published_at: str | None = None
+    merged_at: str | None = None
     html_url: str | None = None
     workflow_name: str | None = None
     author_login: str | None = None
@@ -37,6 +39,7 @@ def parse_event(event_name: str, payload: dict) -> ParsedEvent:
             repository_full_name=repository_full_name,
             action=payload.get("action"),
             branch=pull_request.get("head", {}).get("ref"),
+            base_branch=pull_request.get("base", {}).get("ref"),
             commit_sha=pull_request.get("head", {}).get("sha"),
             number=payload.get("number"),
             external_id=pull_request.get("id"),
@@ -45,6 +48,7 @@ def parse_event(event_name: str, payload: dict) -> ParsedEvent:
             state=pull_request.get("state"),
             html_url=pull_request.get("html_url"),
             author_login=pull_request.get("user", {}).get("login"),
+            merged_at=pull_request.get("merged_at"),
         )
     if event_name == "workflow_run":
         workflow_run = payload["workflow_run"]

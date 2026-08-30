@@ -38,9 +38,11 @@ def sync_repository_data(
         current.body = item.body
         current.state = item.state
         current.head_branch = item.head_branch
+        current.base_branch = item.base_branch
         current.head_sha = item.head_sha
         current.author_login = item.author_login
         current.html_url = item.html_url
+        current.merged_at = _parse_github_datetime(item.merged_at)
 
     for item in workflow_runs:
         current = session.scalar(

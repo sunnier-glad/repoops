@@ -31,7 +31,7 @@ class FakeGitHubClient:
         return WebhookInfo(7, True)
 
     def list_pull_requests(self, access_token: str, repository: str):
-        return [SimpleNamespace(github_id=11, number=3, title="Improve docs", body="Details", state="open", head_branch="docs", head_sha="abc", author_login="octocat", html_url="https://example.test/pr/3")]
+        return [SimpleNamespace(github_id=11, number=3, title="Improve docs", body="Details", state="open", head_branch="docs", base_branch="main", head_sha="abc", author_login="octocat", html_url="https://example.test/pr/3", merged_at=None)]
 
     def list_workflow_runs(self, access_token: str, repository: str):
         return [SimpleNamespace(github_id=21, workflow_name="CI", status="completed", conclusion="failure", branch="main", commit_sha="def", html_url="https://example.test/run/21")]
@@ -140,6 +140,22 @@ def test_sync_endpoint_imports_current_github_quality_data(tmp_path):
         "open_pull_requests",
         "release_notes",
     ]
+    generated_draft = client.post(
+        f"/api/repositories/{repository['id']}/release-notes/draft",
+        json={"version": "v1.1.0"},
+    )
+    assert generated_draft.status_code == 200
+    assert generated_draft.json()["version"] == "v1.1.0"
+    assert generated_draft.json()["source_pr_count"] == 0
+    saved_draft = client.put(
+        f"/api/repositories/{repository['id']}/release-notes/draft",
+        json={"content": "# v1.1.0\n\nEdited notes\n"},
+    )
+    assert saved_draft.status_code == 200
+    assert saved_draft.json()["content"].endswith("Edited notes\n")
+    assert client.get(
+        f"/api/repositories/{repository['id']}/release-notes/draft"
+    ).json()["content"].endswith("Edited notes\n")
 
     with client.repoops_app.state.session_factory() as session:
         assert session.query(PullRequest).count() == 1

@@ -23,9 +23,11 @@ class GitHubPullRequest:
     body: str | None
     state: str
     head_branch: str | None
+    base_branch: str | None
     head_sha: str | None
     author_login: str | None
     html_url: str | None
+    merged_at: str | None
 
 
 @dataclass(frozen=True)

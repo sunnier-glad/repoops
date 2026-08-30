@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from app.auth.dependencies import get_current_user
@@ -9,10 +9,24 @@ from app.github.client import GitHubApiError
 from app.github.service import bind_repository, list_available_repositories
 from app.github.sync import sync_repository_data
 from app.quality.service import evaluate_release_quality
+from app.releases.service import (
+    generate_release_note_draft,
+    get_release_note_draft,
+    release_note_draft_payload,
+    update_release_note_draft,
+)
 
 
 class BindRepositoryRequest(BaseModel):
     full_name: str
+
+
+class GenerateReleaseNoteDraftRequest(BaseModel):
+    version: str = Field(min_length=1, max_length=100)
+
+
+class UpdateReleaseNoteDraftRequest(BaseModel):
+    content: str = Field(min_length=1, max_length=100_000)
 
 
 router = APIRouter(prefix="/api/repositories", tags=["repositories"])
@@ -91,8 +105,10 @@ def pull_requests(request: Request, repository_id: int) -> list[dict[str, object
                 "title": item.title,
                 "state": item.state,
                 "head_branch": item.head_branch,
+                "base_branch": item.base_branch,
                 "head_sha": item.head_sha,
                 "html_url": item.html_url,
+                "merged_at": item.merged_at.isoformat() if item.merged_at else None,
             }
             for item in items
         ]
@@ -147,6 +163,46 @@ def quality_gate(request: Request, repository_id: int) -> dict[str, object]:
     with request.app.state.session_factory() as session:
         repository = _require_owned_repository(session, repository_id, user.id)
         return evaluate_release_quality(session, repository).as_dict()
+
+
+@router.get("/{repository_id}/release-notes/draft")
+def release_note_draft(request: Request, repository_id: int) -> dict[str, object]:
+    user = get_current_user(request)
+    with request.app.state.session_factory() as session:
+        repository = _require_owned_repository(session, repository_id, user.id)
+        draft = get_release_note_draft(session, repository)
+        if draft is None:
+            raise HTTPException(status_code=404, detail="Release Notes 草稿不存在")
+        return release_note_draft_payload(session, draft)
+
+
+@router.post("/{repository_id}/release-notes/draft")
+def create_release_note_draft(
+    request: Request,
+    repository_id: int,
+    body: GenerateReleaseNoteDraftRequest,
+) -> dict[str, object]:
+    user = get_current_user(request)
+    with request.app.state.session_factory() as session:
+        repository = _require_owned_repository(session, repository_id, user.id)
+        draft = generate_release_note_draft(session, repository, body.version)
+        return release_note_draft_payload(session, draft)
+
+
+@router.put("/{repository_id}/release-notes/draft")
+def save_release_note_draft(
+    request: Request,
+    repository_id: int,
+    body: UpdateReleaseNoteDraftRequest,
+) -> dict[str, object]:
+    user = get_current_user(request)
+    with request.app.state.session_factory() as session:
+        repository = _require_owned_repository(session, repository_id, user.id)
+        try:
+            draft = update_release_note_draft(session, repository, body.content)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return release_note_draft_payload(session, draft)
 
 
 @router.post("/{repository_id}/sync")

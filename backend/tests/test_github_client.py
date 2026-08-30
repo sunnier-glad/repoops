@@ -67,6 +67,8 @@ def test_github_client_lists_quality_data_with_normalized_fields():
                         "state": "open",
                         "user": {"login": "octocat"},
                         "head": {"ref": "docs", "sha": "abc"},
+                        "base": {"ref": "main"},
+                        "merged_at": "2026-08-26T08:00:00Z",
                         "html_url": "https://github.com/octocat/demo/pull/3",
                     }
                 ],
@@ -115,6 +117,8 @@ def test_github_client_lists_quality_data_with_normalized_fields():
     release = client.list_releases("gho-token", "octocat/demo")[0]
 
     assert pull_request.head_branch == "docs"
+    assert pull_request.base_branch == "main"
+    assert pull_request.merged_at == "2026-08-26T08:00:00Z"
     assert pull_request.author_login == "octocat"
     assert workflow.conclusion == "failure"
     assert release.published_at == "2026-08-27T10:00:00Z"

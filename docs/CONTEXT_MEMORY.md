@@ -36,6 +36,12 @@
   - 仓库同步后同时读取真实门禁 API。
   - 展示 `阻塞发布 / 需要确认 / 可以发布`、三项证据和 GitHub 原始链接。
   - 支持 900px/680px 响应式布局；客户端已移除演示数据 API 导出和旧测试。
+- 已实现 Release Notes 草稿后端：
+  - PR 同步/Webhook 新增 `base_branch` 和 `merged_at`。
+  - `ReleaseNoteDraft` 保存版本、Markdown、来源 PR 快照和基准 Release。
+  - `GET/POST/PUT /api/repositories/{id}/release-notes/draft` 支持读取、生成与保存编辑。
+  - 门禁“发布说明”检查改为读取待发布草稿，而不是已发布 Release。
+  - `0007_release_note_drafts` 迁移已验证；本地 SQLite 已安全迁移到 0007，迁移前备份保存在系统临时目录。
 
 ## 用户原有改动
 
@@ -50,6 +56,7 @@
 - OAuth 回归测试 5/5 通过，Ruff 通过；API 已重启并再次通过健康检查。
 - 门禁及仓库 API 回归测试 10/10 通过，相关 Ruff 检查通过。
 - 前端 Vitest 12/12 通过，Vite production build 通过；API 健康检查和前端 HTTP 200 通过。
+- Release Notes 后端完整测试 38/38 通过、Ruff 和 0007 空库迁移通过；真实仓库同步成功，当前候选合并 PR 为 0。
 - 本地 SQLite 已保存 1 个真实 GitHub 用户和绑定仓库 `sunnier-glad/life-deadline-radar`。
 - 已调用真实 GitHub 同步：PR 0、失败 Workflow 0、Release 0；这是仓库当前真实状态，不是演示数据或同步异常。
 - OAuth 完成后：同步真实仓库，验证 PR、失败 Workflow 和 Release 详情页；不要创建演示数据。
@@ -61,4 +68,4 @@
 
 1. 用户刷新 `http://localhost:5174/`，确认 OAuth 修复后不再落到 API 404。
 2. 若需要验证非零真实数据，在绑定仓库创建真实 PR、GitHub Actions 运行和 Release 后重新同步。
-3. 下一阶段实现真实 Release Notes 草稿工作流。
+3. 下一阶段实现 Release Notes 前端编辑器，提供版本输入、生成、保存和来源 PR 查看。

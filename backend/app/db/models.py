@@ -81,6 +81,11 @@ class Repository(Base):
     releases: Mapped[list[Release]] = relationship(
         back_populates="repository", cascade="all, delete-orphan"
     )
+    release_note_draft: Mapped[ReleaseNoteDraft | None] = relationship(
+        back_populates="repository",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
 
 
 class WebhookEvent(Base):
@@ -111,9 +116,11 @@ class PullRequest(Base):
     body: Mapped[str | None] = mapped_column(Text, nullable=True)
     state: Mapped[str] = mapped_column(String(30))
     head_branch: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    base_branch: Mapped[str | None] = mapped_column(String(255), nullable=True)
     head_sha: Mapped[str | None] = mapped_column(String(100), nullable=True)
     author_login: Mapped[str | None] = mapped_column(String(100), nullable=True)
     html_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    merged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, onupdate=utc_now
     )
@@ -158,6 +165,28 @@ class Release(Base):
     )
 
     repository: Mapped[Repository] = relationship(back_populates="releases")
+
+
+class ReleaseNoteDraft(Base):
+    __tablename__ = "release_note_drafts"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    repository_id: Mapped[int] = mapped_column(
+        ForeignKey("repositories.id"), unique=True, index=True
+    )
+    version: Mapped[str] = mapped_column(String(100))
+    content: Mapped[str] = mapped_column(Text)
+    source_snapshot_json: Mapped[str] = mapped_column(Text, default="[]")
+    source_pr_count: Mapped[int] = mapped_column(default=0)
+    based_on_release_id: Mapped[int | None] = mapped_column(
+        ForeignKey("releases.id"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+
+    repository: Mapped[Repository] = relationship(back_populates="release_note_draft")
 
 
 class Job(Base):

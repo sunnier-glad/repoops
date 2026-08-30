@@ -85,9 +85,11 @@ class EventService:
             item.body = parsed.body
             item.state = parsed.state or item.state
             item.head_branch = parsed.branch
+            item.base_branch = parsed.base_branch
             item.head_sha = parsed.commit_sha
             item.author_login = parsed.author_login
             item.html_url = parsed.html_url
+            item.merged_at = _parse_datetime(parsed.merged_at)
         elif parsed.kind == "workflow_run":
             item = session.scalar(
                 select(WorkflowRun).where(

@@ -1,0 +1,1 @@
+"""Release note draft workflows."""
