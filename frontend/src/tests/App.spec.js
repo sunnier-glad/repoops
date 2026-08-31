@@ -13,6 +13,22 @@ const qualityGate = {
   ],
 }
 
+const releaseReadiness = {
+  status: 'warning',
+  summary: '自动检查仍有风险项，需要处理或确认',
+  ready_to_release: false,
+  version: null,
+  automated_checks: qualityGate.checks,
+  manual_checks: [
+    { key: 'change_scope_confirmed', title: '变更范围已确认', detail: '已核对本次版本变更。', confirmed: false },
+    { key: 'rollback_plan_confirmed', title: '回滚方案已准备', detail: '已准备回滚步骤。', confirmed: false },
+    { key: 'release_window_confirmed', title: '发布窗口已确认', detail: '已确认发布时间。', confirmed: false },
+  ],
+  progress: { completed: 1, total: 6 },
+  updated_by: null,
+  updated_at: null,
+}
+
 describe('RepoOps app shell', () => {
   it('renders the product name and purpose', () => {
     const wrapper = mount(App)
@@ -130,6 +146,7 @@ describe('RepoOps app shell', () => {
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => [{ tag_name: 'v1.0.0', name: 'First release', html_url: 'https://example.test/release/31' }] })
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => qualityGate })
       .mockResolvedValueOnce({ ok: false, status: 404, json: async () => ({ detail: 'Release Notes 草稿不存在' }) })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => releaseReadiness })
     vi.stubGlobal('fetch', fetchMock)
 
     const wrapper = mount(App)
@@ -162,6 +179,19 @@ describe('RepoOps app shell', () => {
         ? { ...check, status: 'pass', detail: 'Release Notes 草稿已准备完成' }
         : check),
     }
+    const generatedReadiness = {
+      ...releaseReadiness,
+      version: 'v1.2.0',
+      automated_checks: readyGate.checks,
+      progress: { completed: 2, total: 6 },
+    }
+    const savedChecklist = {
+      ...generatedReadiness,
+      manual_checks: generatedReadiness.manual_checks.map((check, index) => ({ ...check, confirmed: index === 0 })),
+      progress: { completed: 3, total: 6 },
+      updated_by: 'sunnier-glad',
+      updated_at: '2026-08-31T00:00:00Z',
+    }
     const savedContent = '# v1.2.0\n\n## 变更内容\n\n- 完善文档'
     const fetchMock = vi.fn()
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ id: 1, github_login: 'sunnier-glad' }) })
@@ -172,10 +202,14 @@ describe('RepoOps app shell', () => {
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => [] })
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => qualityGate })
       .mockResolvedValueOnce({ ok: false, status: 404, json: async () => ({ detail: 'Release Notes 草稿不存在' }) })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => releaseReadiness })
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => generatedDraft })
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => readyGate })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => generatedReadiness })
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ ...generatedDraft, content: savedContent }) })
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => readyGate })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => generatedReadiness })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => savedChecklist })
     vi.stubGlobal('fetch', fetchMock)
 
     const wrapper = mount(App)
@@ -199,13 +233,26 @@ describe('RepoOps app shell', () => {
     await flushPromises()
 
     expect(wrapper.get('[data-testid="release-notes-editor"]').text()).toContain('草稿已保存')
-    expect(fetchMock).toHaveBeenNthCalledWith(9, '/api/repositories/7/release-notes/draft', expect.objectContaining({
+    await wrapper.get('[data-testid="manual-check-change_scope_confirmed"]').setValue(true)
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="release-checklist"]').text()).toContain('确认状态已保存')
+    expect(wrapper.get('[data-testid="release-checklist"]').text()).toContain('sunnier-glad')
+    expect(fetchMock).toHaveBeenNthCalledWith(10, '/api/repositories/7/release-notes/draft', expect.objectContaining({
       method: 'POST',
       body: JSON.stringify({ version: 'v1.2.0' }),
     }))
-    expect(fetchMock).toHaveBeenNthCalledWith(11, '/api/repositories/7/release-notes/draft', expect.objectContaining({
+    expect(fetchMock).toHaveBeenNthCalledWith(13, '/api/repositories/7/release-notes/draft', expect.objectContaining({
       method: 'PUT',
       body: JSON.stringify({ content: savedContent }),
+    }))
+    expect(fetchMock).toHaveBeenNthCalledWith(16, '/api/repositories/7/release-readiness', expect.objectContaining({
+      method: 'PUT',
+      body: JSON.stringify({
+        change_scope_confirmed: true,
+        rollback_plan_confirmed: false,
+        release_window_confirmed: false,
+      }),
     }))
   })
 })

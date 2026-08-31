@@ -8,9 +8,11 @@ import {
   getPullRequests,
   getQualityGate,
   getReleaseNoteDraft,
+  getReleaseReadiness,
   getReleases,
   getBoundRepositories,
   request,
+  saveReleaseChecklist,
   saveReleaseNoteDraft,
   syncRepository,
 } from '../api/client'
@@ -122,6 +124,30 @@ describe('api client', () => {
     expect(fetchMock).toHaveBeenNthCalledWith(3, '/api/repositories/7/release-notes/draft', expect.objectContaining({
       method: 'PUT',
       body: JSON.stringify({ content: saved.content }),
+    }))
+  })
+
+  it('loads and saves the release readiness checklist', async () => {
+    const readiness = {
+      status: 'pending',
+      manual_checks: [{ key: 'change_scope_confirmed', confirmed: false }],
+    }
+    const confirmations = {
+      change_scope_confirmed: true,
+      rollback_plan_confirmed: false,
+      release_window_confirmed: false,
+    }
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => readiness })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => readiness })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(getReleaseReadiness(7)).resolves.toEqual(readiness)
+    await expect(saveReleaseChecklist(7, confirmations)).resolves.toEqual(readiness)
+
+    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/repositories/7/release-readiness', expect.objectContaining({
+      method: 'PUT',
+      body: JSON.stringify(confirmations),
     }))
   })
 })

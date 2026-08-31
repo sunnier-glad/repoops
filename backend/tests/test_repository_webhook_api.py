@@ -6,7 +6,15 @@ from fastapi.testclient import TestClient
 
 from app.auth.service import GitHubIdentity
 from app.config import Settings
-from app.db.models import Job, PullRequest, Release, Repository, User, WorkflowRun
+from app.db.models import (
+    Job,
+    PullRequest,
+    Release,
+    ReleaseChecklist,
+    Repository,
+    User,
+    WorkflowRun,
+)
 from app.github.schemas import GitHubRepository, WebhookInfo
 from app.main import create_app
 
@@ -161,6 +169,72 @@ def test_sync_endpoint_imports_current_github_quality_data(tmp_path):
         assert session.query(PullRequest).count() == 1
         assert session.query(WorkflowRun).count() == 1
         assert session.query(Release).count() == 1
+
+
+def test_release_readiness_persists_manual_checks_without_overriding_gate(tmp_path):
+    client = make_client(tmp_path, webhook_enabled=False)
+    login(client)
+    repository = client.post(
+        "/api/repositories", json={"full_name": "octocat/demo"}
+    ).json()
+    client.post(f"/api/repositories/{repository['id']}/sync")
+
+    missing_draft = client.put(
+        f"/api/repositories/{repository['id']}/release-readiness",
+        json={
+            "change_scope_confirmed": True,
+            "rollback_plan_confirmed": True,
+            "release_window_confirmed": True,
+        },
+    )
+    assert missing_draft.status_code == 409
+
+    client.post(
+        f"/api/repositories/{repository['id']}/release-notes/draft",
+        json={"version": "v1.1.0"},
+    )
+    saved = client.put(
+        f"/api/repositories/{repository['id']}/release-readiness",
+        json={
+            "change_scope_confirmed": True,
+            "rollback_plan_confirmed": True,
+            "release_window_confirmed": True,
+        },
+    )
+
+    assert saved.status_code == 200
+    assert saved.json()["status"] == "blocked"
+    assert saved.json()["ready_to_release"] is False
+    assert saved.json()["updated_by"] == "octocat"
+    assert all(item["confirmed"] for item in saved.json()["manual_checks"])
+
+    with client.repoops_app.state.session_factory() as session:
+        workflow = session.query(WorkflowRun).one()
+        workflow.conclusion = "success"
+        pull_request = session.query(PullRequest).one()
+        pull_request.state = "closed"
+        session.commit()
+        assert session.query(ReleaseChecklist).count() == 1
+
+    ready = client.get(
+        f"/api/repositories/{repository['id']}/release-readiness"
+    )
+    assert ready.status_code == 200
+    assert ready.json()["status"] == "ready"
+    assert ready.json()["ready_to_release"] is True
+    assert ready.json()["progress"] == {"completed": 6, "total": 6}
+
+    client.post(
+        f"/api/repositories/{repository['id']}/release-notes/draft",
+        json={"version": "v1.2.0"},
+    )
+    reset = client.get(
+        f"/api/repositories/{repository['id']}/release-readiness"
+    ).json()
+    assert reset["version"] == "v1.2.0"
+    assert reset["status"] == "pending"
+    assert reset["updated_by"] is None
+    assert not any(item["confirmed"] for item in reset["manual_checks"])
 
 
 def test_webhook_verifies_signature_persists_raw_event_and_returns_202(tmp_path):

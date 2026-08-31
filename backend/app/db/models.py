@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sqlalchemy import BigInteger, DateTime, ForeignKey, String, Text, UniqueConstraint
+from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, String, Text, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -82,6 +82,11 @@ class Repository(Base):
         back_populates="repository", cascade="all, delete-orphan"
     )
     release_note_draft: Mapped[ReleaseNoteDraft | None] = relationship(
+        back_populates="repository",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
+    release_checklist: Mapped[ReleaseChecklist | None] = relationship(
         back_populates="repository",
         uselist=False,
         cascade="all, delete-orphan",
@@ -187,6 +192,28 @@ class ReleaseNoteDraft(Base):
     )
 
     repository: Mapped[Repository] = relationship(back_populates="release_note_draft")
+
+
+class ReleaseChecklist(Base):
+    __tablename__ = "release_checklists"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    repository_id: Mapped[int] = mapped_column(
+        ForeignKey("repositories.id"), unique=True, index=True
+    )
+    version: Mapped[str] = mapped_column(String(100))
+    change_scope_confirmed: Mapped[bool] = mapped_column(Boolean, default=False)
+    rollback_plan_confirmed: Mapped[bool] = mapped_column(Boolean, default=False)
+    release_window_confirmed: Mapped[bool] = mapped_column(Boolean, default=False)
+    confirmed_by_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+
+    repository: Mapped[Repository] = relationship(back_populates="release_checklist")
 
 
 class Job(Base):

@@ -38,3 +38,9 @@ export const saveReleaseNoteDraft = (repositoryId, content) => request(`/api/rep
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({ content }),
 })
+export const getReleaseReadiness = (repositoryId) => request(`/api/repositories/${repositoryId}/release-readiness`)
+export const saveReleaseChecklist = (repositoryId, confirmations) => request(`/api/repositories/${repositoryId}/release-readiness`, {
+  method: 'PUT',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(confirmations),
+})

@@ -9,8 +9,10 @@ import {
   getPullRequests,
   getQualityGate,
   getReleaseNoteDraft,
+  getReleaseReadiness,
   getReleases,
   getSession,
+  saveReleaseChecklist,
   saveReleaseNoteDraft,
   syncRepository,
 } from './api/client'
@@ -37,6 +39,11 @@ const releaseDraftLoading = ref(false)
 const releaseDraftSaving = ref(false)
 const releaseDraftStatus = ref('')
 const releaseDraftError = ref('')
+const releaseReadiness = ref(null)
+const releaseChecklistLoading = ref(false)
+const releaseChecklistSaving = ref(false)
+const releaseChecklistStatus = ref('')
+const releaseChecklistError = ref('')
 
 const navItems = [
   { id: 'overview', label: '质量总览', icon: '⌁' },
@@ -61,6 +68,23 @@ const qualityCheckLabel = (status) => ({
   warning: '需确认',
   pass: '已通过',
 }[status] || status)
+
+const formatTimestamp = (value) => value
+  ? new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value))
+  : ''
+
+const releaseReadinessLabel = computed(() => ({
+  blocked: '阻塞发布',
+  warning: '存在风险',
+  pending: '等待人工确认',
+  ready: '准备完成',
+}[releaseReadiness.value?.status] || '等待检查'))
+
+const releaseReadinessProgress = computed(() => {
+  const progress = releaseReadiness.value?.progress
+  if (!progress?.total) return 0
+  return Math.round((progress.completed / progress.total) * 100)
+})
 
 const detailConfig = computed(() => {
   const configs = {
@@ -176,6 +200,23 @@ async function loadReleaseNoteDraft() {
   }
 }
 
+async function loadReleaseReadiness() {
+  if (!boundRepository.value) return
+  releaseChecklistLoading.value = true
+  releaseChecklistError.value = ''
+  try {
+    releaseReadiness.value = await getReleaseReadiness(boundRepository.value.id)
+  } catch (error) {
+    releaseChecklistError.value = error.message
+  } finally {
+    releaseChecklistLoading.value = false
+  }
+}
+
+async function loadReleaseWorkspace() {
+  await Promise.all([loadReleaseNoteDraft(), loadReleaseReadiness()])
+}
+
 async function handleGenerateReleaseNoteDraft() {
   const version = releaseVersion.value.trim()
   if (!boundRepository.value || !version) return
@@ -184,7 +225,12 @@ async function handleGenerateReleaseNoteDraft() {
   releaseDraftStatus.value = '正在生成草稿…'
   try {
     applyReleaseNoteDraft(await generateReleaseNoteDraft(boundRepository.value.id, version))
-    qualityGate.value = await getQualityGate(boundRepository.value.id)
+    const [qualityGateData, readinessData] = await Promise.all([
+      getQualityGate(boundRepository.value.id),
+      getReleaseReadiness(boundRepository.value.id),
+    ])
+    qualityGate.value = qualityGateData
+    releaseReadiness.value = readinessData
     releaseDraftStatus.value = '草稿已生成，发布门禁已更新'
   } catch (error) {
     releaseDraftStatus.value = ''
@@ -201,7 +247,12 @@ async function handleSaveReleaseNoteDraft() {
   releaseDraftStatus.value = '正在保存草稿…'
   try {
     applyReleaseNoteDraft(await saveReleaseNoteDraft(boundRepository.value.id, releaseContent.value))
-    qualityGate.value = await getQualityGate(boundRepository.value.id)
+    const [qualityGateData, readinessData] = await Promise.all([
+      getQualityGate(boundRepository.value.id),
+      getReleaseReadiness(boundRepository.value.id),
+    ])
+    qualityGate.value = qualityGateData
+    releaseReadiness.value = readinessData
     releaseDraftStatus.value = '草稿已保存'
   } catch (error) {
     releaseDraftStatus.value = ''
@@ -211,8 +262,28 @@ async function handleSaveReleaseNoteDraft() {
   }
 }
 
+async function handleChecklistChange(key, confirmed) {
+  if (!boundRepository.value || !releaseReadiness.value || releaseChecklistSaving.value) return
+  const confirmations = Object.fromEntries(
+    releaseReadiness.value.manual_checks.map(item => [item.key, item.confirmed]),
+  )
+  confirmations[key] = confirmed
+  releaseChecklistSaving.value = true
+  releaseChecklistError.value = ''
+  releaseChecklistStatus.value = '正在保存确认状态…'
+  try {
+    releaseReadiness.value = await saveReleaseChecklist(boundRepository.value.id, confirmations)
+    releaseChecklistStatus.value = '确认状态已保存'
+  } catch (error) {
+    releaseChecklistStatus.value = ''
+    releaseChecklistError.value = error.message
+  } finally {
+    releaseChecklistSaving.value = false
+  }
+}
+
 watch(activeView, (view) => {
-  if (view === 'releases' && boundRepository.value) loadReleaseNoteDraft()
+  if (view === 'releases' && boundRepository.value) loadReleaseWorkspace()
 })
 
 onMounted(async () => {
@@ -359,6 +430,48 @@ onMounted(async () => {
           <div><span class="eyebrow">{{ detailConfig.eyebrow }}</span><h2>{{ detailConfig.title }}</h2><p>{{ detailConfig.description }}</p></div>
           <button class="text-button" type="button" @click="activeView = 'overview'">返回总览 ↩</button>
         </div>
+        <article v-if="activeView === 'releases'" class="panel release-checklist" :class="releaseReadiness?.status || 'loading'" data-testid="release-checklist">
+          <div class="checklist-heading">
+            <div>
+              <span class="eyebrow">RELEASE READINESS</span>
+              <h2>发布前检查单</h2>
+              <p>{{ releaseReadiness?.summary || '正在汇总自动检查和人工确认状态…' }}</p>
+            </div>
+            <div class="checklist-result">
+              <span class="checklist-badge">{{ releaseReadinessLabel }}</span>
+              <strong>{{ releaseReadiness?.progress.completed || 0 }}/{{ releaseReadiness?.progress.total || 6 }}</strong>
+              <small>检查完成</small>
+            </div>
+          </div>
+          <div class="progress-track" aria-label="检查进度">
+            <span :style="{ width: `${releaseReadinessProgress}%` }"></span>
+          </div>
+
+          <div v-if="releaseReadiness" class="checklist-grid">
+            <section class="checklist-group" aria-label="自动检查">
+              <div class="checklist-group-heading"><span>自动检查</span><small>来自真实 GitHub 数据</small></div>
+              <a v-for="check in releaseReadiness.automated_checks" :key="check.key" class="checklist-row automated" :class="check.status" :href="check.url || undefined" :target="check.url ? '_blank' : undefined" rel="noreferrer">
+                <span class="check-indicator">{{ check.status === 'pass' ? '✓' : check.status === 'fail' ? '×' : '!' }}</span>
+                <div><strong>{{ check.title }}</strong><p>{{ check.detail }}</p></div>
+                <small>{{ qualityCheckLabel(check.status) }}{{ check.url ? ' ↗' : '' }}</small>
+              </a>
+            </section>
+            <section class="checklist-group" aria-label="人工确认">
+              <div class="checklist-group-heading"><span>人工确认</span><small>{{ releaseReadiness.version || '等待草稿版本' }}</small></div>
+              <label v-for="check in releaseReadiness.manual_checks" :key="check.key" class="checklist-row manual" :class="{ confirmed: check.confirmed }">
+                <input type="checkbox" :data-testid="`manual-check-${check.key}`" :checked="check.confirmed" :disabled="!releaseNoteDraft || releaseChecklistSaving" @change="handleChecklistChange(check.key, $event.target.checked)">
+                <span class="manual-checkbox">✓</span>
+                <div><strong>{{ check.title }}</strong><p>{{ check.detail }}</p></div>
+              </label>
+            </section>
+          </div>
+          <p v-if="releaseChecklistLoading" class="draft-message">正在读取检查单…</p>
+          <p v-if="releaseChecklistStatus" class="draft-message success" role="status">{{ releaseChecklistStatus }}</p>
+          <p v-if="releaseChecklistError" class="draft-message error" role="alert">{{ releaseChecklistError }}</p>
+          <div v-if="releaseReadiness?.updated_at" class="checklist-audit">
+            最近确认：{{ releaseReadiness.updated_by || '未知用户' }} · {{ formatTimestamp(releaseReadiness.updated_at) }}
+          </div>
+        </article>
         <article v-if="activeView === 'releases'" class="panel release-editor" data-testid="release-notes-editor">
           <div class="release-editor-heading">
             <div>
@@ -372,7 +485,7 @@ onMounted(async () => {
           <div class="release-editor-toolbar">
             <label class="version-field">
               <span>目标版本</span>
-              <input v-model="releaseVersion" data-testid="release-version" type="text" maxlength="100" placeholder="例如 v1.2.0" :disabled="!boundRepository || releaseDraftSaving">
+              <input v-model="releaseVersion" data-testid="release-version" type="text" maxlength="100" placeholder="例如 v1.2.0" :disabled="!boundRepository || releaseDraftLoading || releaseDraftSaving">
             </label>
             <button class="editor-primary-button" data-testid="generate-release-notes" type="button" :disabled="!boundRepository || !releaseVersion.trim() || releaseDraftLoading || releaseDraftSaving" @click="handleGenerateReleaseNoteDraft">
               {{ releaseDraftSaving ? '处理中…' : releaseNoteDraft ? '重新生成' : '生成草稿' }}
@@ -447,6 +560,41 @@ onMounted(async () => {
 .section-heading, .panel-heading { display: flex; justify-content: space-between; align-items: flex-end; gap: 20px; }.section-heading { margin: 46px 0 17px; }.quality-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; }.quality-card { min-height: 176px; display: flex; flex-direction: column; padding: 20px; border: 1px solid #263b3d; border-radius: 13px; background: #101c1e; }.quality-card.danger { border-top: 2px solid #fb8c78; }.quality-card.accent { border-top: 2px solid #8dbae9; }.quality-card.success { border-top: 2px solid #8debc9; }.card-topline, .card-footer { display: flex; justify-content: space-between; color: #839997; font-size: 12px; }.card-arrow { color: #8debc9; }.card-value { margin: 25px 0 auto; color: #eff9f5; font-size: 43px; letter-spacing: -.08em; }.card-footer { padding-top: 14px; border-top: 1px solid #233335; font-size: 10px; }.card-footer span:last-child { color: #aac0bc; }.card-action { border: 0; padding: 0; color: #aac0bc; background: transparent; cursor: pointer; font-size: 10px; }.card-action:hover { color: #8debc9; }
 .release-gate { display: grid; grid-template-columns: minmax(220px, .7fr) 1.5fr; gap: 24px; margin-bottom: 15px; padding: 23px; border: 1px solid #304547; border-left: 3px solid #6c8582; border-radius: 13px; background: linear-gradient(115deg, #111f21, #101a1c); }.release-gate.blocked { border-left-color: #fb8c78; }.release-gate.warning { border-left-color: #e3ba72; }.release-gate.ready { border-left-color: #8debc9; }.gate-summary { display: grid; align-content: start; }.gate-summary h2 { margin-bottom: 16px; }.gate-summary p { margin: 17px 0 0; color: #9aafac; font-size: 12px; line-height: 1.7; }.gate-badge { width: fit-content; border: 1px solid #405557; border-radius: 99px; padding: 7px 10px; color: #bacac7; font: 500 10px 'DM Mono', monospace; }.blocked .gate-badge { border-color: rgba(251, 140, 120, .5); color: #fb9b8a; }.warning .gate-badge { border-color: rgba(227, 186, 114, .5); color: #e3ba72; }.ready .gate-badge { border-color: rgba(141, 235, 201, .5); color: #8debc9; }.gate-checks { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }.gate-check { min-width: 0; padding: 16px; border: 1px solid #2a3e40; border-radius: 10px; background: rgba(7, 17, 19, .45); }.gate-check-heading { display: flex; justify-content: space-between; gap: 10px; align-items: center; }.gate-check-heading strong { font-size: 12px; }.gate-check-heading span { color: #829795; font: 500 9px 'DM Mono', monospace; }.gate-check.fail .gate-check-heading span { color: #fb9b8a; }.gate-check.warning .gate-check-heading span { color: #e3ba72; }.gate-check.pass .gate-check-heading span { color: #8debc9; }.gate-check p { min-height: 44px; margin: 11px 0 0; color: #78908d; font-size: 11px; line-height: 1.65; }.gate-check a { display: inline-block; margin-top: 12px; color: #8debc9; font-size: 10px; }
 .lower-grid { display: grid; grid-template-columns: 1.35fr 1fr; gap: 15px; margin-top: 15px; }.panel { min-height: 320px; padding: 23px; border: 1px solid #263b3d; border-radius: 13px; background: #101a1c; }.text-button { border: 0; color: #8debc9; background: transparent; cursor: pointer; font-size: 11px; }.empty-state { min-height: 240px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }.empty-icon { display: grid; place-items: center; width: 41px; height: 41px; margin-bottom: 15px; border: 1px solid #426462; border-radius: 50%; color: #8debc9; font-size: 23px; }.empty-state strong { font-size: 14px; }.empty-state p { max-width: 320px; margin: 8px 0 18px; color: #78908d; font-size: 12px; line-height: 1.7; }.empty-state a { color: #8debc9; font-size: 12px; font-weight: 700; }.activity-list { display: grid; gap: 0; margin-top: 18px; }.activity-row { display: grid; grid-template-columns: 68px minmax(0, 1fr) auto 18px; align-items: center; gap: 10px; padding: 13px 0; border-bottom: 1px solid #243638; color: #dcebe7; font-size: 12px; }.activity-label { color: #8debc9; font: 10px 'DM Mono', monospace; }.activity-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.activity-detail { color: #78908d; font-size: 11px; }.playbook-list { padding: 6px 0 0; margin: 0; list-style: none; }.playbook-list li { display: flex; gap: 16px; padding: 17px 0; border-bottom: 1px solid #243638; }.playbook-list li:last-child { border-bottom: 0; }.playbook-list li > span { color: #5e7b77; font: 11px 'DM Mono', monospace; }.playbook-list strong { font-size: 12px; }.playbook-list p { margin: 5px 0 0; color: #78908d; font-size: 11px; line-height: 1.6; }.detail-heading { align-items: flex-start; }.detail-heading p { max-width: 560px; margin: 8px 0 0; color: #78908d; font-size: 12px; line-height: 1.7; }.detail-panel { min-height: 320px; }.detail-list { display: grid; }.detail-row { display: grid; grid-template-columns: 78px minmax(0, 1fr) auto; align-items: center; gap: 18px; padding: 20px 0; border-bottom: 1px solid #243638; }.detail-row:last-child { border-bottom: 0; }.detail-kicker { color: #8debc9; font: 11px 'DM Mono', monospace; }.detail-main { min-width: 0; }.detail-main strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }.detail-main p { margin: 6px 0 0; color: #78908d; font-size: 11px; }.detail-status { color: #aac0bc; font-size: 11px; white-space: nowrap; }
+.release-checklist { min-height: auto; margin-bottom: 15px; border-left: 3px solid #647c79; }
+.release-checklist.blocked { border-left-color: #fb8c78; }
+.release-checklist.warning, .release-checklist.pending { border-left-color: #e3ba72; }
+.release-checklist.ready { border-left-color: #8debc9; }
+.checklist-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; }
+.checklist-heading h2 { margin: 8px 0 7px; }
+.checklist-heading p { max-width: 650px; margin: 0; color: #829795; font-size: 12px; line-height: 1.7; }
+.checklist-result { display: grid; grid-template-columns: auto auto; align-items: center; gap: 3px 12px; text-align: right; }
+.checklist-result strong { font: 700 20px 'DM Mono', monospace; }
+.checklist-result small { grid-column: 2; color: #78908d; font-size: 9px; }
+.checklist-badge { grid-row: 1 / span 2; border: 1px solid #405557; border-radius: 99px; padding: 7px 10px; color: #bacac7; font: 500 9px 'DM Mono', monospace; }
+.blocked .checklist-badge { border-color: rgba(251, 140, 120, .5); color: #fb9b8a; }
+.warning .checklist-badge, .pending .checklist-badge { border-color: rgba(227, 186, 114, .5); color: #e3ba72; }
+.ready .checklist-badge { border-color: rgba(141, 235, 201, .5); color: #8debc9; }
+.progress-track { height: 4px; margin: 20px 0; overflow: hidden; border-radius: 99px; background: #243638; }
+.progress-track span { display: block; height: 100%; border-radius: inherit; background: #8debc9; transition: width .25s ease; }
+.checklist-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.checklist-group { overflow: hidden; border: 1px solid #293e40; border-radius: 10px; background: rgba(7, 17, 19, .36); }
+.checklist-group-heading { display: flex; justify-content: space-between; gap: 12px; padding: 13px 15px; border-bottom: 1px solid #293e40; color: #dcebe7; font-size: 11px; font-weight: 700; }
+.checklist-group-heading small { color: #78908d; font-size: 9px; font-weight: 500; }
+.checklist-row { position: relative; display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; align-items: center; gap: 9px; min-height: 76px; padding: 12px 14px; border-bottom: 1px solid #243638; }
+.checklist-row:last-child { border-bottom: 0; }
+.checklist-row strong { display: block; font-size: 11px; }
+.checklist-row p { margin: 5px 0 0; color: #78908d; font-size: 9px; line-height: 1.55; }
+.checklist-row > small { color: #829795; font: 9px 'DM Mono', monospace; }
+.check-indicator, .manual-checkbox { display: grid; place-items: center; width: 24px; height: 24px; border: 1px solid #405557; border-radius: 50%; color: #829795; font: 700 11px 'DM Mono', monospace; }
+.checklist-row.pass .check-indicator { border-color: rgba(141, 235, 201, .5); color: #8debc9; }
+.checklist-row.warning .check-indicator { border-color: rgba(227, 186, 114, .5); color: #e3ba72; }
+.checklist-row.fail .check-indicator { border-color: rgba(251, 140, 120, .5); color: #fb9b8a; }
+.checklist-row.manual { grid-template-columns: 28px minmax(0, 1fr); cursor: pointer; }
+.checklist-row.manual input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.checklist-row.manual input:focus-visible + .manual-checkbox { outline: 2px solid #8debc9; outline-offset: 2px; }
+.checklist-row.manual input:disabled + .manual-checkbox { opacity: .45; }
+.checklist-row.manual.confirmed .manual-checkbox { border-color: #8debc9; color: #071313; background: #8debc9; }
+.checklist-audit { margin-top: 14px; padding-top: 12px; border-top: 1px solid #243638; color: #78908d; font: 9px 'DM Mono', monospace; }
 .release-editor { min-height: auto; margin-bottom: 15px; }
 .release-editor-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; }
 .release-editor-heading h2 { margin: 8px 0 7px; }
@@ -477,6 +625,6 @@ onMounted(async () => {
 .source-list span { grid-row: 1 / span 2; color: #8debc9; font: 10px 'DM Mono', monospace; }
 .source-list strong { overflow: hidden; color: #dcebe7; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .source-list small { color: #78908d; font-size: 9px; }
-@media (max-width: 900px) { .sidebar { width: 190px; }.workspace-orbit { margin-right: 0; transform: scale(.8); }.release-gate { grid-template-columns: 1fr; }.lower-grid, .release-editor-grid { grid-template-columns: 1fr; }.markdown-editor textarea { min-height: 280px; } }
-@media (max-width: 680px) { .app-shell { display: block; }.sidebar { width: auto; padding: 16px; border-right: 0; border-bottom: 1px solid #233335; }.brand-block { padding: 0 5px 15px; }.primary-nav { grid-template-columns: repeat(3, 1fr); }.nav-item { justify-content: center; padding: 8px 4px; font-size: 11px; }.nav-icon, .sidebar-note, .sidebar-footer { display: none; }.main-content { padding: 28px 16px 40px; }.topbar { display: block; }.topbar-actions { padding-top: 14px; }.workspace-banner { min-height: 170px; margin-top: 28px; padding: 23px; }.workspace-orbit { display: none; }.repository-picker { display: grid; }.repository-picker button { min-height: 42px; }.repository-bound-state { display: grid; gap: 6px; }.gate-checks, .quality-grid { grid-template-columns: 1fr; }.quality-card { min-height: 145px; }.section-heading { margin-top: 32px; }.detail-heading { display: block; }.detail-heading .text-button { margin-top: 18px; }.detail-row { grid-template-columns: 48px minmax(0, 1fr); gap: 10px; }.detail-status { grid-column: 2; }.detail-main strong { white-space: normal; }.release-editor-heading { display: grid; }.draft-safety-badge { width: fit-content; }.release-editor-toolbar { grid-template-columns: 1fr 1fr; }.version-field { grid-column: 1 / -1; }.editor-primary-button, .editor-secondary-button { padding: 0 10px; }.markdown-editor textarea { min-height: 240px; } }
+@media (max-width: 900px) { .sidebar { width: 190px; }.workspace-orbit { margin-right: 0; transform: scale(.8); }.release-gate { grid-template-columns: 1fr; }.lower-grid, .release-editor-grid, .checklist-grid { grid-template-columns: 1fr; }.markdown-editor textarea { min-height: 280px; } }
+@media (max-width: 680px) { .app-shell { display: block; }.sidebar { width: auto; padding: 16px; border-right: 0; border-bottom: 1px solid #233335; }.brand-block { padding: 0 5px 15px; }.primary-nav { grid-template-columns: repeat(3, 1fr); }.nav-item { justify-content: center; padding: 8px 4px; font-size: 11px; }.nav-icon, .sidebar-note, .sidebar-footer { display: none; }.main-content { padding: 28px 16px 40px; }.topbar { display: block; }.topbar-actions { padding-top: 14px; }.workspace-banner { min-height: 170px; margin-top: 28px; padding: 23px; }.workspace-orbit { display: none; }.repository-picker { display: grid; }.repository-picker button { min-height: 42px; }.repository-bound-state { display: grid; gap: 6px; }.gate-checks, .quality-grid { grid-template-columns: 1fr; }.quality-card { min-height: 145px; }.section-heading { margin-top: 32px; }.detail-heading { display: block; }.detail-heading .text-button { margin-top: 18px; }.detail-row { grid-template-columns: 48px minmax(0, 1fr); gap: 10px; }.detail-status { grid-column: 2; }.detail-main strong { white-space: normal; }.release-editor-heading, .checklist-heading { display: grid; }.checklist-result { width: fit-content; text-align: left; }.draft-safety-badge { width: fit-content; }.release-editor-toolbar { grid-template-columns: 1fr 1fr; }.version-field { grid-column: 1 / -1; }.editor-primary-button, .editor-secondary-button { padding: 0 10px; }.markdown-editor textarea { min-height: 240px; } }
 </style>

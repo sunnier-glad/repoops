@@ -9,6 +9,10 @@ from app.github.client import GitHubApiError
 from app.github.service import bind_repository, list_available_repositories
 from app.github.sync import sync_repository_data
 from app.quality.service import evaluate_release_quality
+from app.releases.readiness import (
+    release_readiness_payload,
+    update_release_checklist,
+)
 from app.releases.service import (
     generate_release_note_draft,
     get_release_note_draft,
@@ -27,6 +31,12 @@ class GenerateReleaseNoteDraftRequest(BaseModel):
 
 class UpdateReleaseNoteDraftRequest(BaseModel):
     content: str = Field(min_length=1, max_length=100_000)
+
+
+class UpdateReleaseChecklistRequest(BaseModel):
+    change_scope_confirmed: bool
+    rollback_plan_confirmed: bool
+    release_window_confirmed: bool
 
 
 router = APIRouter(prefix="/api/repositories", tags=["repositories"])
@@ -203,6 +213,34 @@ def save_release_note_draft(
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         return release_note_draft_payload(session, draft)
+
+
+@router.get("/{repository_id}/release-readiness")
+def release_readiness(request: Request, repository_id: int) -> dict[str, object]:
+    user = get_current_user(request)
+    with request.app.state.session_factory() as session:
+        repository = _require_owned_repository(session, repository_id, user.id)
+        return release_readiness_payload(session, repository)
+
+
+@router.put("/{repository_id}/release-readiness")
+def save_release_checklist(
+    request: Request,
+    repository_id: int,
+    body: UpdateReleaseChecklistRequest,
+) -> dict[str, object]:
+    user = get_current_user(request)
+    with request.app.state.session_factory() as session:
+        repository = _require_owned_repository(session, repository_id, user.id)
+        try:
+            return update_release_checklist(
+                session,
+                repository,
+                user.id,
+                body.model_dump(),
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @router.post("/{repository_id}/sync")
