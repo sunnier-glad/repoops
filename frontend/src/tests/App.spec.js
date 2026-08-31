@@ -141,6 +141,7 @@ describe('RepoOps app shell', () => {
 
     const switcher = wrapper.get('[data-testid="bound-repository-switcher"]')
     expect(switcher.element.value).toBe('7')
+    expect(wrapper.text()).toContain('下拉框只显示已绑定仓库')
     expect(wrapper.text()).toContain('First repository PR')
 
     await switcher.setValue('8')

@@ -555,7 +555,7 @@ onMounted(async () => {
       </section>
 
       <section v-if="session" id="repository-panel" class="repository-panel" aria-label="仓库接入">
-        <div class="panel-heading"><div><span class="eyebrow">REPOSITORY ACCESS</span><h2>{{ boundRepository ? '当前工作仓库' : '选择工作仓库' }}</h2><p class="panel-helper">{{ boundRepository ? '切换仓库可查看独立的 PR、CI、Release 和发布检查。' : '只会显示当前 GitHub 账号有权限访问的仓库。' }}</p></div><span v-if="boundRepository" class="repository-status">已连接 {{ boundRepositories.length }} 个</span></div>
+        <div class="panel-heading"><div><span class="eyebrow">REPOSITORY ACCESS</span><h2>{{ boundRepository ? '当前工作仓库' : '选择工作仓库' }}</h2><p class="panel-helper">{{ boundRepository ? '下拉框只显示已绑定仓库；点击“绑定新仓库”可添加其他 GitHub 项目。' : '只会显示当前 GitHub 账号有权限访问的仓库。' }}</p></div><span v-if="boundRepository" class="repository-status">已连接 {{ boundRepositories.length }} 个</span></div>
         <div v-if="boundRepository" class="repository-bound-state">
           <label class="repository-selection">
             <span>当前查看仓库</span>
@@ -564,11 +564,11 @@ onMounted(async () => {
             </select>
             <small>{{ boundRepository.webhook_configured ? 'Webhook 已配置' : '本地模式：通过同步按钮获取 GitHub 数据' }}</small>
           </label>
-          <button class="text-button repository-switch-button" data-testid="bind-new-repository" type="button" @click="toggleRepositoryPicker">{{ repositoryPickerOpen ? '收起绑定面板' : '绑定新仓库' }}</button>
+          <button class="text-button repository-action-button" data-testid="bind-new-repository" type="button" @click="toggleRepositoryPicker">{{ repositoryPickerOpen ? '收起绑定面板' : '绑定新仓库' }}</button>
         </div>
         <div v-if="boundRepository" class="sync-toolbar">
           <span data-testid="sync-status">{{ syncStatus || '尚未同步' }}</span>
-          <button class="text-button" type="button" :disabled="syncStatus === '正在同步…'" @click="loadQualityData">同步仓库数据 ↻</button>
+          <button class="text-button repository-action-button" type="button" :disabled="syncStatus === '正在同步…'" @click="loadQualityData">同步仓库数据 ↻</button>
         </div>
         <div v-if="repositoryPickerOpen || !boundRepository" class="repository-picker">
           <select v-model="selectedRepository" aria-label="选择 GitHub 仓库" :disabled="repositoryLoading || !bindableRepositories.length">
@@ -1094,7 +1094,22 @@ h2 { color: #1a3451; font-size: 20px; font-weight: 720; letter-spacing: -.04em; 
 .repository-selection select { width: min(100%, 620px); padding: 13px 14px; border: 1px solid #cfe0ef; border-radius: 13px; color: #244461; background: rgba(255, 255, 255, .92); box-shadow: inset 0 1px 2px rgba(36, 75, 112, .03); font-weight: 650; }
 .repository-selection select:focus, .repository-picker select:focus { outline: 3px solid rgba(0, 122, 255, .16); outline-offset: 1px; }
 .repository-selection small { color: #6e89a4; font-size: 11px; }
-.repository-switch-button { flex: 0 0 auto; padding: 0 0 3px; white-space: nowrap; }
+.repository-action-button {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  border: 1px solid #cfe0ef;
+  border-radius: 12px;
+  padding: 0 14px;
+  color: var(--ios-blue);
+  background: rgba(255, 255, 255, .82);
+  box-shadow: 0 5px 12px rgba(42, 91, 142, .06);
+  white-space: nowrap;
+}
+.repository-action-button:hover:not(:disabled) { border-color: #9fc9f0; background: #eef7ff; color: var(--ios-blue-dark); transform: translateY(-1px); }
+.repository-action-button:disabled { opacity: .48; cursor: not-allowed; }
 .sync-toolbar { margin-top: 16px; padding-top: 14px; border-top-color: #e3edf6; }
 .sync-toolbar > span { color: #6e89a4; font-size: 11px; }
 .text-button, .empty-link, .card-action { color: var(--ios-blue); font-weight: 650; }
@@ -1455,6 +1470,6 @@ body { font-size: 14px; line-height: 1.55; }
 @media (max-width: 680px) {
   .repository-bound-state { align-items: stretch; }
   .repository-selection select { width: 100%; }
-  .repository-switch-button { padding: 0; text-align: left; }
+  .repository-action-button { width: 100%; }
 }
 </style>
