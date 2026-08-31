@@ -61,6 +61,10 @@
   - 总览页新增当前状态、下一步操作和四步工作流；按钮会根据登录、绑定、同步和草稿状态给出上下文动作。
   - Release 质量页增加专用流程条和使用提示；专业术语、空数据、错误和按钮文案更明确，保留真实数据和 AI 不自动发布边界。
   - 补充卡片说明、状态色、悬停/聚焦反馈和 900px/680px 响应式布局；通用引导只在总览显示，避免详情页重复。
+- 已完成 Apple iOS 风格浅蓝主题改造：
+  - `frontend/src/App.vue` 改用系统字体栈，移除 Google Fonts 外部依赖，使用浅蓝渐变背景、白色半透明卡片和系统蓝主操作色。
+  - 统一仓库接入、下一步操作、质量门禁、指标卡片、事件流、Release 检查单和 AI 审阅区的圆角、边框、阴影、状态色与焦点反馈。
+  - 保留真实 GitHub 数据、所有现有 `data-testid`、API 调用和移动端布局；没有新增演示数据或后端变更。
 
 ## 用户原有改动
 
@@ -77,6 +81,7 @@
 - OAuth 回归测试 5/5 通过，Ruff 通过；API 已重启并再次通过健康检查。
 - 门禁及仓库 API 回归测试 10/10 通过，相关 Ruff 检查通过。
 - 前端 Vitest 16/16 通过，Vite production build 通过；API 健康检查和前端 HTTP 200 通过。
+- Apple 浅蓝主题改造后，前端 Vitest 16/16 通过，Vite production build 通过，`git diff --check` 通过；API `/api/health` 返回 `status=ok`，前端 `5174` 返回 HTTP 200。
 - 后端完整测试 42/42 通过、Ruff 通过，Alembic 从空库升级到 0008 通过；真实仓库同步成功，当前候选合并 PR 为 0。
 - 本地 SQLite 已保存 1 个真实 GitHub 用户和绑定仓库 `sunnier-glad/life-deadline-radar`。
 - 已调用真实 GitHub 同步：PR 0、失败 Workflow 0、Release 0；这是仓库当前真实状态，不是演示数据或同步异常。
