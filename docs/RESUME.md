@@ -1,5 +1,7 @@
 # 简历项目描述
 
+项目地址：https://github.com/sunnier-glad/repoops
+
 ## 后端 / AI 应用方向
 
 **GitHub 项目协作与发布质量平台｜RepoOps**　FastAPI、Vue 3、PostgreSQL、Redis、Celery、GitHub API、LLM
@@ -19,4 +21,4 @@
 
 ## 面试真实性边界
 
-当前已验证：后端 `39 passed`、前端 `15 passed`、Ruff 全部通过、Alembic 可从空 SQLite 升级到 `0008_release_checklists`、Vite production build 成功，本地 API 与前端均返回 200。Docker Desktop 当前存在本机环境故障，因此本轮使用本地 SQLite 和关闭 Celery 的开发模式联调；该结果不等同于公网生产部署。
+当前已验证：后端 `42 passed`、前端 `17 passed`、Ruff 全部通过、Alembic 可从空数据库升级到 `0008_release_checklists`、Vite production build 成功；RepoOps GitHub Actions CI 已通过。本地真实数据模式已验证 OAuth、仓库绑定和 GitHub API 同步，公网 HTTPS Webhook 与 Ubuntu 线上部署仍需单独验收。

@@ -2,9 +2,9 @@ services:
   postgres:
     image: postgres:16
     environment:
-      POSTGRES_DB: repoops
-      POSTGRES_USER: repoops
-      POSTGRES_PASSWORD: change-me
+      POSTGRES_DB: ${POSTGRES_DB:-repoops}
+      POSTGRES_USER: ${POSTGRES_USER:-repoops}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U repoops -d repoops"]
       interval: 5s
@@ -31,7 +31,7 @@ services:
       APP_ENV: ${APP_ENV:-development}
       APP_VERSION: ${APP_VERSION:-0.1.0}
       CELERY_ENABLED: ${CELERY_ENABLED:-false}
-      DATABASE_URL: postgresql+psycopg://repoops:change-me@postgres:5432/repoops
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://repoops:change-me@postgres:5432/repoops}
       REDIS_URL: redis://redis:6379/0
       SESSION_SECRET: ${SESSION_SECRET:-development-session-secret}
       GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
@@ -67,7 +67,7 @@ services:
       APP_ENV: ${APP_ENV:-development}
       APP_VERSION: ${APP_VERSION:-0.1.0}
       CELERY_ENABLED: ${CELERY_ENABLED:-false}
-      DATABASE_URL: postgresql+psycopg://repoops:change-me@postgres:5432/repoops
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://repoops:change-me@postgres:5432/repoops}
       REDIS_URL: redis://redis:6379/0
       SESSION_SECRET: ${SESSION_SECRET:-development-session-secret}
       GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}

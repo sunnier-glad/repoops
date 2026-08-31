@@ -1,5 +1,7 @@
 # RepoOps
 
+[GitHub 仓库](https://github.com/sunnier-glad/repoops) · [部署手册](docs/DEPLOYMENT.md) · [真实验收记录](docs/ACCEPTANCE.md)
+
 RepoOps 是面向个人开发者和小团队的 GitHub 项目协作与发布质量平台，第一版聚焦 CI 失败处理、Pull Request 状态和版本发布质量。
 
 ## 当前状态
@@ -22,7 +24,7 @@ Release 质量页支持生成可审阅的 AI 润色建议：保留原始草稿�
 
 ## 运行方式
 
-复制 `.env.example` 为 `.env`，填入 GitHub OAuth 和加密密钥后启动基础服务：
+复制 `.env.example` 为 `.env`，填入 GitHub OAuth、数据库密码和加密密钥后启动基础服务：
 
 ```powershell
 docker compose up -d --build
@@ -35,7 +37,7 @@ docker compose up -d --build
 npm run dev --prefix frontend
 ```
 
-默认前端地址是 `http://localhost:5174`，API 健康检查是 `/api/health`。生产环境应先执行 `alembic upgrade head`，再启用 `CELERY_ENABLED=true` 启动 Worker。
+默认前端地址是 `http://localhost:5174`，API 健康检查是 `/api/health`。API 容器启动时会执行 `alembic upgrade head`；生产环境应使用强密钥、PostgreSQL、Redis，并启用 `CELERY_ENABLED=true`。完整 Ubuntu 部署步骤见 [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)。
 
 ## 质量保证
 
