@@ -1250,4 +1250,76 @@ h2 { color: #1a3451; font-size: 20px; font-weight: 720; letter-spacing: -.04em; 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; }
 }
+/* Typography comfort pass: make supporting copy readable without losing the iOS hierarchy. */
+body { font-size: 14px; line-height: 1.55; }
+.brand-block span { font-size: 10px; }
+.nav-item { font-size: 14px; }
+.page-subtitle { font-size: 14px; line-height: 1.6; }
+.workspace-banner p { font-size: 14px; line-height: 1.7; }
+.panel-helper { font-size: 12px; line-height: 1.7; }
+.repository-bound-state strong { font-size: 15px; }
+.repository-bound-state span, .sync-toolbar > span { font-size: 12px; }
+.repository-hint, .repository-error { font-size: 12px; line-height: 1.65; }
+.next-action-copy h2 { font-size: 22px; }
+.next-action-copy p { font-size: 14px; line-height: 1.75; }
+.workflow-intro strong { font-size: 14px; }
+.workflow-intro small { font-size: 11px; line-height: 1.7; }
+.workflow-steps strong { font-size: 12px; }
+.workflow-steps small { font-size: 10px; line-height: 1.55; }
+.workflow-status { font-size: 10px; }
+.section-helper { font-size: 12px; line-height: 1.7; }
+.gate-summary p { font-size: 13px; line-height: 1.7; }
+.gate-help { font-size: 11px; line-height: 1.7; }
+.gate-check-heading strong { font-size: 13px; }
+.gate-check-heading span { font-size: 11px; }
+.gate-check p { font-size: 12px; line-height: 1.65; }
+.gate-check a { font-size: 11px; }
+.card-topline span:first-child { font-size: 13px; }
+.card-description { min-height: 34px; font-size: 12px; line-height: 1.6; }
+.card-footer { font-size: 11px; }
+.card-action { font-size: 11px; }
+.activity-row { font-size: 13px; }
+.activity-detail { font-size: 12px; }
+.playbook-list strong { font-size: 13px; }
+.playbook-list p { font-size: 12px; line-height: 1.7; }
+.detail-heading p { font-size: 13px; line-height: 1.75; }
+.detail-main strong { font-size: 14px; }
+.detail-main p, .detail-status { font-size: 12px; }
+.release-flow-heading h2 { font-size: 18px; }
+.release-flow-heading small { font-size: 11px; }
+.release-flow-steps strong { font-size: 12px; }
+.release-flow-steps small { font-size: 10px; line-height: 1.55; }
+.release-flow-steps b { font-size: 10px; }
+.checklist-heading p, .release-editor-heading p { font-size: 13px; line-height: 1.75; }
+.checklist-result small { font-size: 10px; }
+.checklist-group-heading { font-size: 12px; }
+.checklist-group-heading small { font-size: 10px; }
+.checklist-row strong { font-size: 12px; }
+.checklist-row p { font-size: 11px; line-height: 1.65; }
+.checklist-row > small { font-size: 10px; }
+.checklist-audit { font-size: 11px; }
+.version-field, .markdown-editor { font-size: 12px; }
+.version-field input { font-size: 13px; }
+.markdown-editor textarea { font-size: 13px; line-height: 1.8; }
+.editor-primary-button, .editor-secondary-button, .editor-ai-button { font-size: 12px; }
+.editor-hint { font-size: 12px; line-height: 1.75; }
+.draft-message { font-size: 12px; line-height: 1.7; }
+.source-summary strong { font-size: 15px; }
+.source-summary p, .source-empty { font-size: 11px; line-height: 1.7; }
+.source-list strong { font-size: 12px; }
+.source-list small { font-size: 10px; }
+.ai-polish-heading h3 { font-size: 15px; }
+.ai-polish-heading p { font-size: 12px; line-height: 1.7; }
+.ai-change-list li { font-size: 10px; }
+.ai-compare-grid > div > span { font-size: 10px; }
+.ai-compare-grid pre { font-size: 11px; line-height: 1.75; }
+.ai-model-note { font-size: 10px; }
+@media (max-width: 720px) {
+  .page-subtitle { font-size: 13px; }
+  .workspace-banner p, .next-action-copy p { font-size: 13px; }
+  .next-action-copy h2 { font-size: 20px; }
+  .card-description { min-height: 0; }
+  .workflow-steps strong { font-size: 11px; }
+  .workflow-steps small { font-size: 10px; }
+}
 </style>
