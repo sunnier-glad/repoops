@@ -66,6 +66,7 @@
 ## 验证结果与遗留问题
 
 - 已验证 API 健康检查和前端首页均可访问；重启本地 SQLite 模式 API 后，OpenAPI 已加载 AI 润色两个接口。
+- 用户已在本地 `.env` 配置 LLM Key；未读取、输出或提交 Key。API 已在 SQLite 本地模式重启，健康检查通过，前端 5174 可访问；尚未主动触发真实模型请求。
 - 真实 GitHub OAuth 已到达回调并成功创建会话，但原实现回调到 API 根路径 `/`，导致 `GET /` 404。
 - 已新增受控 `FRONTEND_URL` 配置，OAuth state 记录该地址，回调后返回 `http://localhost:5174/`；涉及 `config.py`、OAuth 路由、环境模板、Compose 和测试。
 - OAuth 回归测试 5/5 通过，Ruff 通过；API 已重启并再次通过健康检查。
@@ -83,5 +84,5 @@
 
 1. 用户刷新 `http://localhost:5174/`，进入“Release 质量”查看草稿编辑器与发布前检查单。
 2. 当前真实仓库没有已合并 PR；若要验证非零来源列表，需要先在 GitHub 合并真实 PR，再同步仓库并重新生成草稿。
-3. 当前本地 `.env` 默认 LLM 配置是否可用尚未做真实模型调用验证；下一步应配置可用的 LLM Key，并用真实合并 PR 验证非空来源的润色结果。
+3. 当前本地 LLM Key 是否可用尚未做真实模型调用验证；下一步在已登录页面点击“AI 润色建议”，再用真实合并 PR 验证非空来源的润色结果。
 4. Docker Desktop 的 Windows socket 问题仍未解决；当前开发验证继续使用 SQLite + `.venv`。
