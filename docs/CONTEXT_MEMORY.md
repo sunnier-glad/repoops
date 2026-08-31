@@ -107,3 +107,24 @@
 2. 当前真实仓库没有已合并 PR；若要验证非零来源列表，需要先在 GitHub 合并真实 PR，再同步仓库并重新生成草稿。
 3. 当前本地 LLM Key 是否可用尚未做真实模型调用验证；下一步在已登录页面点击“AI 润色建议”，再用真实合并 PR 验证非空来源的润色结果。
 4. Docker Desktop 的 Windows socket 问题仍未解决；当前开发验证继续使用 SQLite + `.venv`。
+
+## 2026-08-31 真实验收、部署与文档包装进展
+
+- 已创建公开 GitHub 仓库 `https://github.com/sunnier-glad/repoops`，并将 RepoOps 推送到 `main`。
+- 已新增并推送提交 `492c9c2 docs: package deployment and acceptance guidance`，包含：
+  - `docs/DEPLOYMENT.md`：Ubuntu + Docker Compose 部署、无域名服务器 IP 预览、有域名 HTTPS 正式环境、健康检查、备份与边界。
+  - `docs/ACCEPTANCE.md`：真实 GitHub 数据验收对象、验收矩阵、证据留存要求和结论口径。
+  - `README.md`：补充 GitHub、部署和验收文档入口。
+  - `docker-compose.yml` / `.env.example`：PostgreSQL 数据库名、用户、密码和 `DATABASE_URL` 改为可配置变量。
+  - `docs/RESUME.md`：更新项目链接、验证数字和公网部署边界。
+- 本轮验证：后端 `42 passed`、前端 `17 passed`、Vite production build 通过、Compose config 通过、`git diff --check` 通过；普通测试环境首次失败是 `.env` 使用容器数据库主机和 Windows 临时目录权限，改用临时 SQLite 与项目内隔离临时目录后通过。
+- 真实验收仓库仍为 `sunnier-glad/life-deadline-radar`。此前已核对其当前无 PR、无 Workflow Run、无 Release；因此目前只能验收“空数据同步正确”，不能声称非空事件链已完成。
+- 当前 GitHub CLI 本地授权令牌已失效，已重新发起设备授权，等待用户在 GitHub 设备页面完成授权；不记录设备验证码。
+- Ubuntu 服务器尚未提供 IP/SSH 入口，因此只完成部署文档，未声称已完成远程部署；无域名时只能做服务器 IP 预览和手动同步，公网 Webhook 仍需 HTTPS 地址。
+
+### 当前下一步
+
+1. 用户完成 GitHub CLI 设备授权后，复核 `repoops` 最新 CI 和真实验收仓库状态。
+2. 单独确认是否允许在 `life-deadline-radar` 创建无业务影响的真实验收 PR、Workflow Run 和 Release；未经确认不创建外部资源。
+3. 获取 Ubuntu 服务器地址和 SSH 登录方式（不要在聊天中发送密码或密钥），按 `docs/DEPLOYMENT.md` 完成部署与健康检查。
+4. 将真实验收链接、数量变化、截图和线上检查结果补回 `docs/ACCEPTANCE.md`，再更新简历口径。
