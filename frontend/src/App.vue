@@ -9,7 +9,9 @@ import {
   getPullRequests,
   getQualityGate,
   getReleaseNoteDraft,
+  getLatestReleaseNotesPolish,
   getReleaseReadiness,
+  polishReleaseNotes,
   getReleases,
   getSession,
   saveReleaseChecklist,
@@ -44,6 +46,10 @@ const releaseChecklistLoading = ref(false)
 const releaseChecklistSaving = ref(false)
 const releaseChecklistStatus = ref('')
 const releaseChecklistError = ref('')
+const releasePolishSuggestion = ref(null)
+const releasePolishLoading = ref(false)
+const releasePolishStatus = ref('')
+const releasePolishError = ref('')
 
 const navItems = [
   { id: 'overview', label: '质量总览', icon: '⌁' },
@@ -214,7 +220,27 @@ async function loadReleaseReadiness() {
 }
 
 async function loadReleaseWorkspace() {
-  await Promise.all([loadReleaseNoteDraft(), loadReleaseReadiness()])
+  await Promise.all([loadReleaseNoteDraft(), loadReleaseReadiness(), loadLatestReleaseNotesPolish()])
+}
+
+async function loadLatestReleaseNotesPolish() {
+  if (!boundRepository.value) return
+  releasePolishError.value = ''
+  try {
+    const result = await getLatestReleaseNotesPolish(boundRepository.value.id)
+    if (result.status === 'succeeded' && result.suggestion) {
+      releasePolishSuggestion.value = result
+    } else {
+      releasePolishSuggestion.value = null
+      releasePolishError.value = result.error || '上一次 AI 润色未生成可审阅建议'
+    }
+  } catch (error) {
+    if (error.status === 404) {
+      releasePolishSuggestion.value = null
+    } else {
+      releasePolishError.value = error.message
+    }
+  }
 }
 
 async function handleGenerateReleaseNoteDraft() {
@@ -231,6 +257,8 @@ async function handleGenerateReleaseNoteDraft() {
     ])
     qualityGate.value = qualityGateData
     releaseReadiness.value = readinessData
+    releasePolishSuggestion.value = null
+    releasePolishStatus.value = ''
     releaseDraftStatus.value = '草稿已生成，发布门禁已更新'
   } catch (error) {
     releaseDraftStatus.value = ''
@@ -253,6 +281,8 @@ async function handleSaveReleaseNoteDraft() {
     ])
     qualityGate.value = qualityGateData
     releaseReadiness.value = readinessData
+    releasePolishSuggestion.value = null
+    releasePolishStatus.value = ''
     releaseDraftStatus.value = '草稿已保存'
   } catch (error) {
     releaseDraftStatus.value = ''
@@ -260,6 +290,36 @@ async function handleSaveReleaseNoteDraft() {
   } finally {
     releaseDraftSaving.value = false
   }
+}
+
+async function handlePolishReleaseNotes() {
+  if (!boundRepository.value || !releaseNoteDraft.value || releasePolishLoading.value) return
+  releasePolishLoading.value = true
+  releasePolishError.value = ''
+  releasePolishStatus.value = '正在生成润色建议…'
+  try {
+    const result = await polishReleaseNotes(boundRepository.value.id)
+    if (result.status !== 'succeeded' || !result.suggestion) {
+      releasePolishSuggestion.value = null
+      releasePolishStatus.value = ''
+      releasePolishError.value = result.error || 'AI 未返回可审阅的建议'
+    } else {
+      releasePolishSuggestion.value = result
+      releasePolishStatus.value = '建议已生成，请审阅后手动采用'
+    }
+  } catch (error) {
+    releasePolishStatus.value = ''
+    releasePolishError.value = error.message
+  } finally {
+    releasePolishLoading.value = false
+  }
+}
+
+function adoptReleaseNotesSuggestion() {
+  const suggestedContent = releasePolishSuggestion.value?.suggestion?.suggested_content
+  if (!suggestedContent) return
+  releaseContent.value = suggestedContent
+  releasePolishStatus.value = '建议已载入编辑区，请检查内容后保存'
 }
 
 async function handleChecklistChange(key, confirmed) {
@@ -491,6 +551,7 @@ onMounted(async () => {
               {{ releaseDraftSaving ? '处理中…' : releaseNoteDraft ? '重新生成' : '生成草稿' }}
             </button>
             <button class="editor-secondary-button" data-testid="save-release-notes" type="button" :disabled="!releaseNoteDraft || !releaseContent.trim() || releaseDraftLoading || releaseDraftSaving" @click="handleSaveReleaseNoteDraft">保存修改</button>
+            <button class="editor-ai-button" data-testid="polish-release-notes" type="button" :disabled="!releaseNoteDraft || releaseDraftSaving || releasePolishLoading" @click="handlePolishReleaseNotes">{{ releasePolishLoading ? '分析中…' : 'AI 润色建议' }}</button>
           </div>
 
           <p v-if="releaseDraftLoading" class="draft-message">正在读取草稿…</p>
@@ -498,6 +559,8 @@ onMounted(async () => {
           <p v-else-if="!releaseNoteDraft" class="draft-message">尚未生成草稿。填写目标版本后，系统会从已同步的合并 PR 中提取变更。</p>
           <p v-if="releaseDraftStatus" class="draft-message success" role="status">{{ releaseDraftStatus }}</p>
           <p v-if="releaseDraftError" class="draft-message error" role="alert">{{ releaseDraftError }}</p>
+          <p v-if="releasePolishStatus" class="draft-message success" role="status">{{ releasePolishStatus }}</p>
+          <p v-if="releasePolishError" class="draft-message error" role="alert">{{ releasePolishError }}</p>
 
           <div class="release-editor-grid">
             <label class="markdown-editor">
@@ -520,6 +583,20 @@ onMounted(async () => {
               <p v-else class="source-empty">当前没有符合条件的已合并 PR。草稿仍可生成和手动编辑，但不会伪造变更内容。</p>
             </aside>
           </div>
+          <section v-if="releasePolishSuggestion?.suggestion" class="ai-polish-panel" data-testid="ai-polish-panel">
+            <div class="ai-polish-heading">
+              <div><span class="eyebrow">REVIEWABLE SUGGESTION</span><h3>AI 润色建议</h3><p>{{ releasePolishSuggestion.suggestion.summary }}</p></div>
+              <button class="editor-secondary-button" data-testid="adopt-polish-suggestion" type="button" @click="adoptReleaseNotesSuggestion">载入建议到编辑区</button>
+            </div>
+            <ul v-if="releasePolishSuggestion.suggestion.changes?.length" class="ai-change-list">
+              <li v-for="change in releasePolishSuggestion.suggestion.changes" :key="change">{{ change }}</li>
+            </ul>
+            <div class="ai-compare-grid">
+              <div><span>当前草稿</span><pre>{{ releasePolishSuggestion.suggestion.base_content }}</pre></div>
+              <div><span>建议版本</span><pre>{{ releasePolishSuggestion.suggestion.suggested_content }}</pre></div>
+            </div>
+            <small class="ai-model-note">模型：{{ releasePolishSuggestion.model }} · 建议已保存为独立分析记录</small>
+          </section>
         </article>
         <article class="panel detail-panel">
           <div v-if="detailItems.length" class="detail-list">
@@ -600,7 +677,7 @@ onMounted(async () => {
 .release-editor-heading h2 { margin: 8px 0 7px; }
 .release-editor-heading p { max-width: 620px; margin: 0; color: #78908d; font-size: 12px; line-height: 1.7; }
 .draft-safety-badge { flex: none; border: 1px solid rgba(141, 235, 201, .35); border-radius: 99px; padding: 7px 10px; color: #8debc9; font: 500 9px 'DM Mono', monospace; }
-.release-editor-toolbar { display: grid; grid-template-columns: minmax(190px, 1fr) auto auto; align-items: end; gap: 10px; margin: 24px 0 16px; }
+.release-editor-toolbar { display: grid; grid-template-columns: minmax(190px, 1fr) repeat(3, auto); align-items: end; gap: 10px; margin: 24px 0 16px; }
 .version-field, .markdown-editor { display: grid; gap: 8px; color: #91a6a3; font-size: 11px; }
 .version-field input, .markdown-editor textarea { width: 100%; border: 1px solid #304547; border-radius: 9px; outline: none; color: #e9f1ef; background: #0b1517; }
 .version-field input { min-height: 42px; padding: 0 13px; }
@@ -610,7 +687,8 @@ onMounted(async () => {
 .editor-primary-button, .editor-secondary-button { min-height: 42px; border-radius: 9px; padding: 0 16px; cursor: pointer; font-size: 11px; font-weight: 700; }
 .editor-primary-button { border: 1px solid #8debc9; color: #071313; background: #8debc9; }
 .editor-secondary-button { border: 1px solid #3b5153; color: #c8d8d4; background: transparent; }
-.editor-primary-button:disabled, .editor-secondary-button:disabled { opacity: .45; cursor: not-allowed; }
+.editor-ai-button { min-height: 42px; border: 1px solid #8dbae9; border-radius: 9px; padding: 0 16px; color: #c9ddf3; background: rgba(141, 186, 233, .08); cursor: pointer; font-size: 11px; font-weight: 700; }
+.editor-primary-button:disabled, .editor-secondary-button:disabled, .editor-ai-button:disabled { opacity: .45; cursor: not-allowed; }
 .draft-message { margin: 8px 0 15px; color: #91a6a3; font-size: 11px; }
 .draft-message.success { color: #8debc9; }
 .draft-message.error { color: #fb9b8a; }
@@ -625,6 +703,17 @@ onMounted(async () => {
 .source-list span { grid-row: 1 / span 2; color: #8debc9; font: 10px 'DM Mono', monospace; }
 .source-list strong { overflow: hidden; color: #dcebe7; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .source-list small { color: #78908d; font-size: 9px; }
+.ai-polish-panel { margin-top: 15px; border: 1px solid #3b5262; border-radius: 10px; padding: 18px; background: linear-gradient(120deg, rgba(24, 42, 54, .68), rgba(12, 25, 29, .6)); }
+.ai-polish-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; }
+.ai-polish-heading h3 { margin: 8px 0 6px; font-size: 14px; }
+.ai-polish-heading p { margin: 0; color: #a6bdc9; font-size: 11px; line-height: 1.6; }
+.ai-change-list { display: flex; flex-wrap: wrap; gap: 7px; padding: 0; margin: 16px 0; list-style: none; }
+.ai-change-list li { border: 1px solid #385263; border-radius: 99px; padding: 6px 9px; color: #b8d1e3; font-size: 9px; }
+.ai-compare-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.ai-compare-grid > div { min-width: 0; }
+.ai-compare-grid > div > span { display: block; margin-bottom: 7px; color: #8faab9; font: 500 9px 'DM Mono', monospace; text-transform: uppercase; }
+.ai-compare-grid pre { min-height: 170px; max-height: 310px; overflow: auto; margin: 0; border: 1px solid #304752; border-radius: 8px; padding: 12px; color: #d2e0e5; background: rgba(5, 13, 16, .58); white-space: pre-wrap; word-break: break-word; font: 10px/1.7 'DM Mono', monospace; }
+.ai-model-note { display: block; margin-top: 12px; color: #718b96; font-size: 9px; }
 @media (max-width: 900px) { .sidebar { width: 190px; }.workspace-orbit { margin-right: 0; transform: scale(.8); }.release-gate { grid-template-columns: 1fr; }.lower-grid, .release-editor-grid, .checklist-grid { grid-template-columns: 1fr; }.markdown-editor textarea { min-height: 280px; } }
-@media (max-width: 680px) { .app-shell { display: block; }.sidebar { width: auto; padding: 16px; border-right: 0; border-bottom: 1px solid #233335; }.brand-block { padding: 0 5px 15px; }.primary-nav { grid-template-columns: repeat(3, 1fr); }.nav-item { justify-content: center; padding: 8px 4px; font-size: 11px; }.nav-icon, .sidebar-note, .sidebar-footer { display: none; }.main-content { padding: 28px 16px 40px; }.topbar { display: block; }.topbar-actions { padding-top: 14px; }.workspace-banner { min-height: 170px; margin-top: 28px; padding: 23px; }.workspace-orbit { display: none; }.repository-picker { display: grid; }.repository-picker button { min-height: 42px; }.repository-bound-state { display: grid; gap: 6px; }.gate-checks, .quality-grid { grid-template-columns: 1fr; }.quality-card { min-height: 145px; }.section-heading { margin-top: 32px; }.detail-heading { display: block; }.detail-heading .text-button { margin-top: 18px; }.detail-row { grid-template-columns: 48px minmax(0, 1fr); gap: 10px; }.detail-status { grid-column: 2; }.detail-main strong { white-space: normal; }.release-editor-heading, .checklist-heading { display: grid; }.checklist-result { width: fit-content; text-align: left; }.draft-safety-badge { width: fit-content; }.release-editor-toolbar { grid-template-columns: 1fr 1fr; }.version-field { grid-column: 1 / -1; }.editor-primary-button, .editor-secondary-button { padding: 0 10px; }.markdown-editor textarea { min-height: 240px; } }
+@media (max-width: 680px) { .app-shell { display: block; }.sidebar { width: auto; padding: 16px; border-right: 0; border-bottom: 1px solid #233335; }.brand-block { padding: 0 5px 15px; }.primary-nav { grid-template-columns: repeat(3, 1fr); }.nav-item { justify-content: center; padding: 8px 4px; font-size: 11px; }.nav-icon, .sidebar-note, .sidebar-footer { display: none; }.main-content { padding: 28px 16px 40px; }.topbar { display: block; }.topbar-actions { padding-top: 14px; }.workspace-banner { min-height: 170px; margin-top: 28px; padding: 23px; }.workspace-orbit { display: none; }.repository-picker { display: grid; }.repository-picker button { min-height: 42px; }.repository-bound-state { display: grid; gap: 6px; }.gate-checks, .quality-grid { grid-template-columns: 1fr; }.quality-card { min-height: 145px; }.section-heading { margin-top: 32px; }.detail-heading { display: block; }.detail-heading .text-button { margin-top: 18px; }.detail-row { grid-template-columns: 48px minmax(0, 1fr); gap: 10px; }.detail-status { grid-column: 2; }.detail-main strong { white-space: normal; }.release-editor-heading, .checklist-heading { display: grid; }.checklist-result { width: fit-content; text-align: left; }.draft-safety-badge { width: fit-content; }.release-editor-toolbar { grid-template-columns: 1fr 1fr; }.version-field { grid-column: 1 / -1; }.editor-primary-button, .editor-secondary-button, .editor-ai-button { padding: 0 10px; }.markdown-editor textarea { min-height: 240px; }.ai-polish-heading { display: grid; }.ai-compare-grid { grid-template-columns: 1fr; } }
 </style>

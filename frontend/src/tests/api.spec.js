@@ -7,11 +7,13 @@ import {
   getFailedWorkflows,
   getPullRequests,
   getQualityGate,
+  getLatestReleaseNotesPolish,
   getReleaseNoteDraft,
   getReleaseReadiness,
   getReleases,
   getBoundRepositories,
   request,
+  polishReleaseNotes,
   saveReleaseChecklist,
   saveReleaseNoteDraft,
   syncRepository,
@@ -148,6 +150,35 @@ describe('api client', () => {
     expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/repositories/7/release-readiness', expect.objectContaining({
       method: 'PUT',
       body: JSON.stringify(confirmations),
+    }))
+  })
+
+  it('loads and generates a reviewable release notes polish suggestion', async () => {
+    const suggestion = {
+      id: 5,
+      status: 'succeeded',
+      model: 'deepseek-chat',
+      suggestion: {
+        base_content: '# v1.2.0',
+        summary: '统一变更表达',
+        suggested_content: '# v1.2.0\n\n- Improve docs',
+        changes: ['统一变更表达'],
+      },
+    }
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => suggestion })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => suggestion })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(getLatestReleaseNotesPolish(7)).resolves.toEqual(suggestion)
+    await expect(polishReleaseNotes(7)).resolves.toEqual(suggestion)
+
+    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/repositories/7/release-notes/ai-polish/latest', expect.objectContaining({
+      credentials: 'include',
+    }))
+    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/repositories/7/release-notes/ai-polish', expect.objectContaining({
+      method: 'POST',
+      credentials: 'include',
     }))
   })
 })

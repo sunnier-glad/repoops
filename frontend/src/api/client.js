@@ -44,3 +44,7 @@ export const saveReleaseChecklist = (repositoryId, confirmations) => request(`/a
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify(confirmations),
 })
+export const getLatestReleaseNotesPolish = (repositoryId) => request(`/api/repositories/${repositoryId}/release-notes/ai-polish/latest`)
+export const polishReleaseNotes = (repositoryId) => request(`/api/repositories/${repositoryId}/release-notes/ai-polish`, {
+  method: 'POST',
+})

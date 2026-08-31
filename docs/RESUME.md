@@ -8,7 +8,7 @@
 - 使用 HMAC-SHA256 校验 Webhook，并以 `repository_id + delivery_id` 做事件幂等；接收接口先保存原始 payload，再异步处理耗时任务。
 - 设计 PR、Workflow Run、Release 和 Job 数据模型，按用户授权范围过滤查询；GitHub Token 和 Webhook Secret 加密保存。
 - 实现可解释发布门禁与版本级发布前检查单，聚合主分支 CI、开放 PR、Release Notes 和人工确认，记录操作人与时间并防止人工勾选绕过阻塞项。
-- 接入 Celery/Redis 执行事件处理、PR 摘要、CI 失败解释和 Release Notes 草稿；AI 输出异常独立记录，不影响原始业务状态。
+- 接入 Celery/Redis 执行事件处理、PR 摘要、CI 失败解释和 Release Notes 草稿；实现保留原文、前后对比、人工采用的 AI 润色流程，分析结果独立记录且不影响原始业务状态。
 - 使用 pytest、Vitest、Ruff、Alembic 和 GitHub Actions 验证认证、签名、幂等、权限、任务和前端构建链路。
 
 ## 通用后端方向

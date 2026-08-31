@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from app.auth.service import GitHubIdentity
 from app.config import Settings
 from app.db.models import (
+    AiAnalysis,
     Job,
     PullRequest,
     Release,
@@ -235,6 +236,66 @@ def test_release_readiness_persists_manual_checks_without_overriding_gate(tmp_pa
     assert reset["status"] == "pending"
     assert reset["updated_by"] is None
     assert not any(item["confirmed"] for item in reset["manual_checks"])
+
+
+def test_release_notes_ai_polish_is_reviewable_and_failures_are_recorded(
+    tmp_path, monkeypatch
+):
+    client = make_client(tmp_path, webhook_enabled=False)
+    login(client)
+    repository = client.post(
+        "/api/repositories", json={"full_name": "octocat/demo"}
+    ).json()
+    client.post(
+        f"/api/repositories/{repository['id']}/release-notes/draft",
+        json={"version": "v1.1.0"},
+    )
+
+    class FakePolishClient:
+        def __init__(self, base_url, api_key, model):
+            self.model = model
+
+        def complete(self, prompt):
+            assert "v1.1.0" in prompt
+            return {
+                "summary": "统一变更表达",
+                "suggested_content": "# v1.1.0\n\n- Improve docs",
+                "changes": ["统一变更表达"],
+            }
+
+    monkeypatch.setattr("app.releases.polish.DeepSeekClient", FakePolishClient)
+    suggestion = client.post(
+        f"/api/repositories/{repository['id']}/release-notes/ai-polish"
+    )
+
+    assert suggestion.status_code == 200
+    assert suggestion.json()["status"] == "succeeded"
+    assert suggestion.json()["suggestion"]["base_content"].startswith("# v1.1.0")
+    assert suggestion.json()["suggestion"]["changes"] == ["统一变更表达"]
+    latest = client.get(
+        f"/api/repositories/{repository['id']}/release-notes/ai-polish/latest"
+    )
+    assert latest.status_code == 200
+    assert latest.json()["id"] == suggestion.json()["id"]
+
+    class FailingPolishClient(FakePolishClient):
+        def complete(self, prompt):
+            raise RuntimeError("模拟 LLM 不可用")
+
+    monkeypatch.setattr("app.releases.polish.DeepSeekClient", FailingPolishClient)
+    failed = client.post(
+        f"/api/repositories/{repository['id']}/release-notes/ai-polish"
+    )
+
+    assert failed.status_code == 200
+    assert failed.json()["status"] == "failed"
+    assert failed.json()["error"] == "模拟 LLM 不可用"
+    assert failed.json()["suggestion"] is None
+    assert client.get(
+        f"/api/repositories/{repository['id']}/release-notes/ai-polish/latest"
+    ).json()["status"] == "failed"
+    with client.repoops_app.state.session_factory() as session:
+        assert session.query(AiAnalysis).filter_by(analysis_type="release_notes_polish").count() == 2
 
 
 def test_webhook_verifies_signature_persists_raw_event_and_returns_202(tmp_path):

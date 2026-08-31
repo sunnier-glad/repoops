@@ -147,6 +147,7 @@ describe('RepoOps app shell', () => {
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => qualityGate })
       .mockResolvedValueOnce({ ok: false, status: 404, json: async () => ({ detail: 'Release Notes 草稿不存在' }) })
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => releaseReadiness })
+      .mockResolvedValueOnce({ ok: false, status: 404, json: async () => ({ detail: '尚未生成 AI 润色建议' }) })
     vi.stubGlobal('fetch', fetchMock)
 
     const wrapper = mount(App)
@@ -193,6 +194,18 @@ describe('RepoOps app shell', () => {
       updated_at: '2026-08-31T00:00:00Z',
     }
     const savedContent = '# v1.2.0\n\n## 变更内容\n\n- 完善文档'
+    const polishedContent = '# v1.2.0\n\n## 变更内容\n\n- Improve docs'
+    const polishSuggestion = {
+      id: 9,
+      status: 'succeeded',
+      model: 'deepseek-chat',
+      suggestion: {
+        base_content: generatedDraft.content,
+        summary: '统一变更表达',
+        suggested_content: polishedContent,
+        changes: ['统一变更表达'],
+      },
+    }
     const fetchMock = vi.fn()
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ id: 1, github_login: 'sunnier-glad' }) })
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => [{ id: 7, full_name: 'octocat/demo', webhook_configured: false }] })
@@ -203,9 +216,11 @@ describe('RepoOps app shell', () => {
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => qualityGate })
       .mockResolvedValueOnce({ ok: false, status: 404, json: async () => ({ detail: 'Release Notes 草稿不存在' }) })
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => releaseReadiness })
+      .mockResolvedValueOnce({ ok: false, status: 404, json: async () => ({ detail: '尚未生成 AI 润色建议' }) })
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => generatedDraft })
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => readyGate })
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => generatedReadiness })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => polishSuggestion })
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ ...generatedDraft, content: savedContent }) })
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => readyGate })
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => generatedReadiness })
@@ -228,6 +243,12 @@ describe('RepoOps app shell', () => {
     expect(wrapper.get('[data-testid="release-notes-editor"]').text()).toContain('Improve docs')
     expect(wrapper.get('a[href="https://example.test/pr/12"]').text()).toContain('#12')
 
+    await wrapper.get('[data-testid="polish-release-notes"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="ai-polish-panel"]').text()).toContain('统一变更表达')
+    await wrapper.get('[data-testid="adopt-polish-suggestion"]').trigger('click')
+    expect(wrapper.get('[data-testid="release-notes-content"]').element.value).toBe(polishedContent)
+
     await wrapper.get('[data-testid="release-notes-content"]').setValue(savedContent)
     await wrapper.get('[data-testid="save-release-notes"]').trigger('click')
     await flushPromises()
@@ -238,15 +259,18 @@ describe('RepoOps app shell', () => {
 
     expect(wrapper.get('[data-testid="release-checklist"]').text()).toContain('确认状态已保存')
     expect(wrapper.get('[data-testid="release-checklist"]').text()).toContain('sunnier-glad')
-    expect(fetchMock).toHaveBeenNthCalledWith(10, '/api/repositories/7/release-notes/draft', expect.objectContaining({
+    expect(fetchMock).toHaveBeenNthCalledWith(11, '/api/repositories/7/release-notes/draft', expect.objectContaining({
       method: 'POST',
       body: JSON.stringify({ version: 'v1.2.0' }),
     }))
-    expect(fetchMock).toHaveBeenNthCalledWith(13, '/api/repositories/7/release-notes/draft', expect.objectContaining({
+    expect(fetchMock).toHaveBeenNthCalledWith(14, '/api/repositories/7/release-notes/ai-polish', expect.objectContaining({
+      method: 'POST',
+    }))
+    expect(fetchMock).toHaveBeenNthCalledWith(15, '/api/repositories/7/release-notes/draft', expect.objectContaining({
       method: 'PUT',
       body: JSON.stringify({ content: savedContent }),
     }))
-    expect(fetchMock).toHaveBeenNthCalledWith(16, '/api/repositories/7/release-readiness', expect.objectContaining({
+    expect(fetchMock).toHaveBeenNthCalledWith(18, '/api/repositories/7/release-readiness', expect.objectContaining({
       method: 'PUT',
       body: JSON.stringify({
         change_scope_confirmed: true,

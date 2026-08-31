@@ -53,6 +53,10 @@
   - 草稿版本变化后旧确认自动失效；自动门禁为 `blocked` 或 `warning` 时，人工勾选不能改变该结论。
   - Release 质量页展示完成进度、自动证据、人工勾选与审计信息，不提供自动发布入口。
   - 本地 SQLite 已从 0007 升级至 `0008_release_checklists`；升级前备份位于系统临时目录。
+- 已实现可审阅的 AI Release Notes 润色建议：
+  - `POST/GET /api/repositories/{id}/release-notes/ai-polish` 与 `/latest` 复用 DeepSeek 客户端和既有 `AiAnalysis` 表。
+  - 结构化保存当前草稿原文、建议 Markdown、摘要、变更列表、模型和状态；失败也会独立记录，不改草稿、不调用 GitHub 写接口。
+  - 草稿内容变化后旧建议自动失效；前端展示前后内容对比，用户只能手动载入编辑区，仍需再次保存。
 
 ## 用户原有改动
 
@@ -61,13 +65,13 @@
 
 ## 验证结果与遗留问题
 
-- 已验证 API 健康检查和前端首页均可访问。
+- 已验证 API 健康检查和前端首页均可访问；重启本地 SQLite 模式 API 后，OpenAPI 已加载 AI 润色两个接口。
 - 真实 GitHub OAuth 已到达回调并成功创建会话，但原实现回调到 API 根路径 `/`，导致 `GET /` 404。
 - 已新增受控 `FRONTEND_URL` 配置，OAuth state 记录该地址，回调后返回 `http://localhost:5174/`；涉及 `config.py`、OAuth 路由、环境模板、Compose 和测试。
 - OAuth 回归测试 5/5 通过，Ruff 通过；API 已重启并再次通过健康检查。
 - 门禁及仓库 API 回归测试 10/10 通过，相关 Ruff 检查通过。
-- 前端 Vitest 15/15 通过，Vite production build 通过；API 健康检查和前端 HTTP 200 通过。
-- 后端完整测试 39/39 通过、Ruff 通过，Alembic 从空库升级到 0008 通过；真实仓库同步成功，当前候选合并 PR 为 0。
+- 前端 Vitest 16/16 通过，Vite production build 通过；API 健康检查和前端 HTTP 200 通过。
+- 后端完整测试 42/42 通过、Ruff 通过，Alembic 从空库升级到 0008 通过；真实仓库同步成功，当前候选合并 PR 为 0。
 - 本地 SQLite 已保存 1 个真实 GitHub 用户和绑定仓库 `sunnier-glad/life-deadline-radar`。
 - 已调用真实 GitHub 同步：PR 0、失败 Workflow 0、Release 0；这是仓库当前真实状态，不是演示数据或同步异常。
 - OAuth 完成后：同步真实仓库，验证 PR、失败 Workflow 和 Release 详情页；不要创建演示数据。
@@ -75,8 +79,9 @@
 - 真实数据模式清理验证：后端完整测试 36/36 通过、Ruff 通过、Alembic 从空库升级到 `0006_remove_demo_flags` 通过。
 - Docker 修复未完成，不要执行 factory reset；重启系统后先确认 stale socket 是否自动消失。
 
-## 下一步
+## 当前遗留问题与下一步
 
 1. 用户刷新 `http://localhost:5174/`，进入“Release 质量”查看草稿编辑器与发布前检查单。
 2. 当前真实仓库没有已合并 PR；若要验证非零来源列表，需要先在 GitHub 合并真实 PR，再同步仓库并重新生成草稿。
-3. 下一阶段可实现可审阅的 AI Release Notes 润色建议，保留原文、差异和人工采用操作；仍不自动发布。
+3. 当前本地 `.env` 默认 LLM 配置是否可用尚未做真实模型调用验证；下一步应配置可用的 LLM Key，并用真实合并 PR 验证非空来源的润色结果。
+4. Docker Desktop 的 Windows socket 问题仍未解决；当前开发验证继续使用 SQLite + `.venv`。

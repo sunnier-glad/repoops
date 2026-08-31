@@ -9,6 +9,10 @@ from app.github.client import GitHubApiError
 from app.github.service import bind_repository, list_available_repositories
 from app.github.sync import sync_repository_data
 from app.quality.service import evaluate_release_quality
+from app.releases.polish import (
+    create_release_notes_polish,
+    get_latest_release_notes_polish,
+)
 from app.releases.readiness import (
     release_readiness_payload,
     update_release_checklist,
@@ -238,6 +242,34 @@ def save_release_checklist(
                 repository,
                 user.id,
                 body.model_dump(),
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.get("/{repository_id}/release-notes/ai-polish/latest")
+def latest_release_notes_polish(
+    request: Request, repository_id: int
+) -> dict[str, object]:
+    user = get_current_user(request)
+    with request.app.state.session_factory() as session:
+        repository = _require_owned_repository(session, repository_id, user.id)
+        analysis = get_latest_release_notes_polish(session, repository)
+        if analysis is None:
+            raise HTTPException(status_code=404, detail="尚未生成 AI 润色建议")
+        return analysis
+
+
+@router.post("/{repository_id}/release-notes/ai-polish")
+def create_release_notes_polish_suggestion(
+    request: Request, repository_id: int
+) -> dict[str, object]:
+    user = get_current_user(request)
+    with request.app.state.session_factory() as session:
+        repository = _require_owned_repository(session, repository_id, user.id)
+        try:
+            return create_release_notes_polish(
+                session, repository, request.app.state.settings
             )
         except ValueError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
