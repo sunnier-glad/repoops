@@ -130,7 +130,7 @@ describe('RepoOps app shell', () => {
     const wrapper = mount(App)
     await flushPromises()
 
-    expect(wrapper.text()).toContain('等待 GitHub 数据')
+    expect(wrapper.text()).toContain('还没有同步到事件')
     expect(wrapper.text()).toContain('同步仓库数据')
     expect(wrapper.text()).not.toContain('演示')
     expect(wrapper.text()).not.toContain('加载本地演示数据')

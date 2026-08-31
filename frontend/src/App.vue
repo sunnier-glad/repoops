@@ -58,9 +58,40 @@ const navItems = [
 ]
 
 const qualityCards = computed(() => [
-  { id: 'metric-ci', label: 'CI 失败', value: String(failedWorkflows.value.length), hint: '当前失败任务', tone: 'danger', action: '查看失败任务', target: 'ci' },
-  { id: 'metric-pr', label: 'PR 协作', value: String(pullRequests.value.filter(item => item.state === 'open').length), hint: '开放请求', tone: 'accent', action: '查看开放 PR', target: 'pull-requests' },
-  { id: 'metric-release', label: 'Release 质量', value: String(releases.value.length), hint: '发布记录', tone: 'success', action: '查看发布记录', target: 'releases' },
+  { id: 'metric-ci', label: 'CI 失败', description: '自动化检查未通过的任务', value: String(failedWorkflows.value.length), hint: '当前失败任务', tone: 'danger', action: '查看失败任务', target: 'ci' },
+  { id: 'metric-pr', label: 'PR 协作', description: '等待处理的代码合并请求', value: String(pullRequests.value.filter(item => item.state === 'open').length), hint: '开放请求', tone: 'accent', action: '查看开放 PR', target: 'pull-requests' },
+  { id: 'metric-release', label: 'Release 质量', description: 'GitHub 上已经发布的版本', value: String(releases.value.length), hint: '发布记录', tone: 'success', action: '查看发布记录', target: 'releases' },
+])
+
+const hasReleaseDraft = computed(() => Boolean(
+  releaseNoteDraft.value
+  || qualityGate.value?.checks?.some(check => check.key === 'release_notes' && check.status === 'pass'),
+))
+
+const workflowSteps = computed(() => {
+  const syncDone = syncStatus.value === '同步完成'
+  return [
+    { key: 'connect', number: '01', label: '连接仓库', detail: boundRepository.value ? '已连接真实仓库' : session.value ? '等待选择仓库' : '需要先登录', status: boundRepository.value ? 'done' : session.value ? 'current' : 'locked' },
+    { key: 'sync', number: '02', label: '同步数据', detail: syncDone ? 'PR、CI、Release 已更新' : '从 GitHub 拉取最新记录', status: !boundRepository.value ? 'locked' : syncDone ? 'done' : 'current' },
+    { key: 'draft', number: '03', label: '准备发布说明', detail: hasReleaseDraft.value ? '已有可编辑草稿' : '生成版本变更摘要', status: !syncDone ? 'locked' : hasReleaseDraft.value ? 'done' : 'current' },
+    { key: 'review', number: '04', label: '检查并确认', detail: releaseReadiness.value?.status === 'ready' ? '检查单已完成' : '人工确认发布风险', status: !hasReleaseDraft.value ? 'locked' : releaseReadiness.value?.status === 'ready' ? 'done' : 'current' },
+  ]
+})
+
+const nextAction = computed(() => {
+  if (sessionLoading.value) return { eyebrow: 'WORKSPACE STATUS', title: '正在恢复工作区', description: '正在读取登录状态和已绑定仓库，请稍候。', action: 'none', label: '读取中…' }
+  if (!session.value) return { eyebrow: 'START HERE', title: '先连接你的 GitHub 项目', description: '登录后选择一个有权限访问的仓库，RepoOps 才能读取真实的 PR、CI 和版本记录。', action: 'login', label: 'GitHub 登录' }
+  if (!boundRepository.value) return { eyebrow: 'NEXT STEP', title: '绑定一个工作仓库', description: '从你的 GitHub 仓库列表中选择项目，绑定后即可开始同步质量数据。', action: 'bind', label: '选择仓库' }
+  if (syncStatus.value !== '同步完成') return { eyebrow: 'NEXT STEP', title: '同步一次 GitHub 数据', description: '先拉取最新的 PR、CI 和 Release，下面的质量判断才会有依据。', action: 'sync', label: syncStatus.value === '正在同步…' ? '同步中…' : '同步仓库数据' }
+  if (!hasReleaseDraft.value) return { eyebrow: 'RELEASE QUALITY', title: '生成本次版本的发布说明', description: '系统会根据已同步的合并 PR 生成草稿，你可以编辑内容，也可以让 AI 提供可审阅的润色建议。', action: 'release', label: '去生成草稿' }
+  return { eyebrow: 'RELEASE QUALITY', title: '检查并确认发布准备状态', description: '草稿已经准备好。请核对变更范围、回滚方案和发布时间，再查看是否还有自动风险。', action: 'release', label: '查看发布质量' }
+})
+
+const releaseWorkflowSteps = computed(() => [
+  { key: 'sync', number: '01', label: '同步数据', detail: '获取真实 GitHub 记录', status: syncStatus.value === '同步完成' ? 'done' : 'current' },
+  { key: 'draft', number: '02', label: '生成草稿', detail: '整理合并 PR 变更', status: releaseNoteDraft.value ? 'done' : 'current' },
+  { key: 'review', number: '03', label: '审阅保存', detail: '人工编辑或采用 AI 建议', status: releaseNoteDraft.value && releaseDraftStatus.value === '草稿已保存' ? 'done' : releaseNoteDraft.value ? 'current' : 'locked' },
+  { key: 'checklist', number: '04', label: '发布前检查', detail: '确认自动风险和人工事项', status: releaseReadiness.value?.status === 'ready' ? 'done' : releaseReadiness.value ? 'current' : 'locked' },
 ])
 
 const qualityGateLabel = computed(() => ({
@@ -178,6 +209,17 @@ async function loadQualityData() {
   } catch (error) {
     syncStatus.value = '同步失败'
     syncError.value = error.message
+  }
+}
+
+function handleNextAction() {
+  if (nextAction.value.action === 'bind') {
+    document.getElementById('repository-panel')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  } else if (nextAction.value.action === 'sync') {
+    loadQualityData()
+  } else if (nextAction.value.action === 'release') {
+    activeView.value = 'releases'
+    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 }
 
@@ -410,8 +452,32 @@ onMounted(async () => {
         <div class="workspace-orbit" aria-hidden="true"><span class="orbit-core">RO</span><span class="orbit-ring ring-one"></span><span class="orbit-ring ring-two"></span></div>
       </section>
 
+      <section v-if="activeView === 'overview'" class="next-action-card" :class="nextAction.action" data-testid="next-action" aria-label="下一步操作">
+        <div class="next-action-copy">
+          <span class="eyebrow">{{ nextAction.eyebrow }}</span>
+          <h2>{{ nextAction.title }}</h2>
+          <p>{{ nextAction.description }}</p>
+        </div>
+        <div class="next-action-cta">
+          <span>推荐下一步</span>
+          <a v-if="nextAction.action === 'login'" class="primary-action" href="/api/auth/github">{{ nextAction.label }} <span>↗</span></a>
+          <button v-else class="primary-action" type="button" :disabled="nextAction.action === 'none' || syncStatus === '正在同步…'" @click="handleNextAction">{{ nextAction.label }} <span>→</span></button>
+        </div>
+      </section>
+
+      <section v-if="activeView === 'overview'" class="workflow-strip" data-testid="workflow-guide" aria-label="使用流程">
+        <div class="workflow-intro"><span class="eyebrow">HOW TO USE</span><strong>四步完成一次发布检查</strong><small>先连接和同步，再生成说明，最后确认风险。</small></div>
+        <ol class="workflow-steps">
+          <li v-for="step in workflowSteps" :key="step.key" :class="step.status">
+            <span class="workflow-number">{{ step.number }}</span>
+            <div><strong>{{ step.label }}</strong><small>{{ step.detail }}</small></div>
+            <span class="workflow-status">{{ step.status === 'done' ? '完成' : step.status === 'current' ? '当前' : '待开始' }}</span>
+          </li>
+        </ol>
+      </section>
+
       <section v-if="session" id="repository-panel" class="repository-panel" aria-label="仓库接入">
-        <div class="panel-heading"><div><span class="eyebrow">REPOSITORY ACCESS</span><h2>选择工作仓库</h2></div><span v-if="boundRepository" class="repository-status">已连接</span></div>
+        <div class="panel-heading"><div><span class="eyebrow">REPOSITORY ACCESS</span><h2>{{ boundRepository ? '当前工作仓库' : '选择工作仓库' }}</h2><p class="panel-helper">{{ boundRepository ? '已连接真实 GitHub 数据，点击同步可刷新 PR、CI 和版本记录。' : '只会显示当前 GitHub 账号有权限访问的仓库。' }}</p></div><span v-if="boundRepository" class="repository-status">已连接</span></div>
         <div v-if="boundRepository" class="repository-bound-state">
           <strong>{{ boundRepository.full_name }}</strong>
           <span>{{ boundRepository.webhook_configured ? 'Webhook 已配置' : 'Webhook 配置待完成' }}</span>
@@ -437,7 +503,7 @@ onMounted(async () => {
       </section>
 
       <template v-if="activeView === 'overview'">
-        <section class="section-heading"><div><span class="eyebrow">QUALITY SIGNALS</span><h2>今天的发布状态</h2></div><span class="updated-label"><span class="status-dot"></span>数据实时同步</span></section>
+        <section class="section-heading"><div><span class="eyebrow">QUALITY SIGNALS</span><h2>当前质量状态</h2><p class="section-helper">用下面的门禁和指标判断：现在是否适合准备下一次发布。</p></div><span class="updated-label"><span class="status-dot"></span>数据实时同步</span></section>
         <section v-if="boundRepository" class="release-gate" :class="qualityGate?.status || 'loading'" data-testid="release-gate" aria-label="发布质量门禁">
           <div class="gate-summary">
             <div>
@@ -446,6 +512,7 @@ onMounted(async () => {
             </div>
             <span class="gate-badge">{{ qualityGateLabel }}</span>
             <p>{{ qualityGate?.summary || '正在根据真实 GitHub 数据评估发布风险…' }}</p>
+            <span class="gate-help">怎么看：红色代表需要先处理，黄色代表需要人工确认，绿色代表当前检查通过。</span>
           </div>
           <div v-if="qualityGate" class="gate-checks">
             <article v-for="check in qualityGate.checks" :key="check.key" class="gate-check" :class="check.status" :data-testid="`gate-check-${check.key}`">
@@ -459,6 +526,7 @@ onMounted(async () => {
           <article v-for="card in qualityCards" :key="card.label" class="quality-card" :class="card.tone" :data-testid="card.id">
             <div class="card-topline"><span>{{ card.label }}</span><span class="card-arrow">↗</span></div>
             <strong class="card-value">{{ card.value }}</strong>
+            <p class="card-description">{{ card.description }}</p>
             <div class="card-footer"><span>{{ card.hint }}</span><button class="card-action" type="button" @click="activeView = card.target">{{ card.action }}</button></div>
           </article>
         </section>
@@ -471,7 +539,7 @@ onMounted(async () => {
                 <span class="activity-label">{{ activity.label }}</span><span class="activity-title">{{ activity.title }}</span><span class="activity-detail">{{ activity.detail }}</span><span>↗</span>
               </a>
             </div>
-            <div v-else class="empty-state"><div class="empty-icon">⌁</div><strong>{{ boundRepository ? '等待 GitHub 数据' : '还没有 GitHub 事件' }}</strong><p>{{ boundRepository ? '当前仓库还没有 PR、CI 或 Release；在 GitHub 产生真实事件后点击“同步仓库数据”。' : '先选择并绑定一个仓库，再接收 push、PR、CI 和 release。' }}</p><button class="empty-link" type="button" @click="document.getElementById('repository-panel')?.scrollIntoView({ behavior: 'smooth' })">选择仓库 <span>↗</span></button></div>
+            <div v-else class="empty-state"><div class="empty-icon">⌁</div><strong>{{ boundRepository ? '还没有同步到事件' : '还没有 GitHub 事件' }}</strong><p>{{ boundRepository ? '当前仓库还没有 PR、CI 或 Release；先点击同步，之后在 GitHub 产生真实事件再同步一次。' : '先选择并绑定一个仓库，再接收 push、PR、CI 和 release。' }}</p><button v-if="boundRepository" class="empty-link" type="button" :disabled="syncStatus === '正在同步…'" @click="loadQualityData">同步仓库数据 <span>↻</span></button><button v-else class="empty-link" type="button" @click="document.getElementById('repository-panel')?.scrollIntoView({ behavior: 'smooth' })">选择工作仓库 <span>↗</span></button></div>
             <p v-if="syncError" class="repository-error" role="alert">{{ syncError }}</p>
           </article>
           <article class="panel playbook-panel">
@@ -490,6 +558,12 @@ onMounted(async () => {
           <div><span class="eyebrow">{{ detailConfig.eyebrow }}</span><h2>{{ detailConfig.title }}</h2><p>{{ detailConfig.description }}</p></div>
           <button class="text-button" type="button" @click="activeView = 'overview'">返回总览 ↩</button>
         </div>
+        <section v-if="activeView === 'releases'" class="release-flow-guide" data-testid="release-flow-guide" aria-label="Release 质量使用步骤">
+          <div class="release-flow-heading"><div><span class="eyebrow">RELEASE FLOW</span><h2>按顺序完成，不容易漏步骤</h2></div><small>草稿和建议都不会自动发布</small></div>
+          <ol class="release-flow-steps">
+            <li v-for="step in releaseWorkflowSteps" :key="step.key" :class="step.status"><span>{{ step.number }}</span><div><strong>{{ step.label }}</strong><small>{{ step.detail }}</small></div><b>{{ step.status === 'done' ? '✓' : step.status === 'current' ? '进行中' : '待开始' }}</b></li>
+          </ol>
+        </section>
         <article v-if="activeView === 'releases'" class="panel release-checklist" :class="releaseReadiness?.status || 'loading'" data-testid="release-checklist">
           <div class="checklist-heading">
             <div>
@@ -548,11 +622,13 @@ onMounted(async () => {
               <input v-model="releaseVersion" data-testid="release-version" type="text" maxlength="100" placeholder="例如 v1.2.0" :disabled="!boundRepository || releaseDraftLoading || releaseDraftSaving">
             </label>
             <button class="editor-primary-button" data-testid="generate-release-notes" type="button" :disabled="!boundRepository || !releaseVersion.trim() || releaseDraftLoading || releaseDraftSaving" @click="handleGenerateReleaseNoteDraft">
-              {{ releaseDraftSaving ? '处理中…' : releaseNoteDraft ? '重新生成' : '生成草稿' }}
+              {{ releaseDraftSaving ? '处理中…' : releaseNoteDraft ? '重新生成草稿' : '生成草稿' }}
             </button>
             <button class="editor-secondary-button" data-testid="save-release-notes" type="button" :disabled="!releaseNoteDraft || !releaseContent.trim() || releaseDraftLoading || releaseDraftSaving" @click="handleSaveReleaseNoteDraft">保存修改</button>
             <button class="editor-ai-button" data-testid="polish-release-notes" type="button" :disabled="!releaseNoteDraft || releaseDraftSaving || releasePolishLoading" @click="handlePolishReleaseNotes">{{ releasePolishLoading ? '分析中…' : 'AI 润色建议' }}</button>
           </div>
+
+          <p class="editor-hint"><span>使用提示</span>先生成草稿，再编辑或获取 AI 建议；AI 只提供建议，确认后仍需手动保存。</p>
 
           <p v-if="releaseDraftLoading" class="draft-message">正在读取草稿…</p>
           <p v-else-if="!boundRepository" class="draft-message">请先绑定 GitHub 仓库，再生成发布说明。</p>
@@ -716,4 +792,67 @@ onMounted(async () => {
 .ai-model-note { display: block; margin-top: 12px; color: #718b96; font-size: 9px; }
 @media (max-width: 900px) { .sidebar { width: 190px; }.workspace-orbit { margin-right: 0; transform: scale(.8); }.release-gate { grid-template-columns: 1fr; }.lower-grid, .release-editor-grid, .checklist-grid { grid-template-columns: 1fr; }.markdown-editor textarea { min-height: 280px; } }
 @media (max-width: 680px) { .app-shell { display: block; }.sidebar { width: auto; padding: 16px; border-right: 0; border-bottom: 1px solid #233335; }.brand-block { padding: 0 5px 15px; }.primary-nav { grid-template-columns: repeat(3, 1fr); }.nav-item { justify-content: center; padding: 8px 4px; font-size: 11px; }.nav-icon, .sidebar-note, .sidebar-footer { display: none; }.main-content { padding: 28px 16px 40px; }.topbar { display: block; }.topbar-actions { padding-top: 14px; }.workspace-banner { min-height: 170px; margin-top: 28px; padding: 23px; }.workspace-orbit { display: none; }.repository-picker { display: grid; }.repository-picker button { min-height: 42px; }.repository-bound-state { display: grid; gap: 6px; }.gate-checks, .quality-grid { grid-template-columns: 1fr; }.quality-card { min-height: 145px; }.section-heading { margin-top: 32px; }.detail-heading { display: block; }.detail-heading .text-button { margin-top: 18px; }.detail-row { grid-template-columns: 48px minmax(0, 1fr); gap: 10px; }.detail-status { grid-column: 2; }.detail-main strong { white-space: normal; }.release-editor-heading, .checklist-heading { display: grid; }.checklist-result { width: fit-content; text-align: left; }.draft-safety-badge { width: fit-content; }.release-editor-toolbar { grid-template-columns: 1fr 1fr; }.version-field { grid-column: 1 / -1; }.editor-primary-button, .editor-secondary-button, .editor-ai-button { padding: 0 10px; }.markdown-editor textarea { min-height: 240px; }.ai-polish-heading { display: grid; }.ai-compare-grid { grid-template-columns: 1fr; } }
+/* Guided workflow layer: keep the existing visual language, but make the next action obvious. */
+.next-action-card { display: flex; justify-content: space-between; align-items: center; gap: 28px; margin-top: 15px; padding: 22px 24px; border: 1px solid #365759; border-radius: 14px; background: linear-gradient(105deg, rgba(28, 57, 57, .92), rgba(14, 27, 30, .96)); box-shadow: 0 18px 45px rgba(0, 0, 0, .12); }
+.next-action-card.login { border-color: #507a77; }
+.next-action-card.bind, .next-action-card.sync, .next-action-card.release { border-color: #416c68; }
+.next-action-copy { min-width: 0; }
+.next-action-copy h2 { margin: 8px 0 7px; color: #f2faf6; font-size: 18px; }
+.next-action-copy p { max-width: 690px; margin: 0; color: #a6beb8; font-size: 12px; line-height: 1.75; }
+.next-action-cta { display: grid; flex: none; justify-items: end; gap: 9px; }
+.next-action-cta > span { color: #75928d; font: 9px 'DM Mono', monospace; letter-spacing: .12em; text-transform: uppercase; }
+.primary-action { display: inline-flex; align-items: center; gap: 12px; min-height: 42px; border: 1px solid #8debc9; border-radius: 9px; padding: 0 15px; color: #071313; background: #8debc9; font-size: 11px; font-weight: 800; cursor: pointer; box-shadow: 0 8px 20px rgba(141, 235, 201, .12); }
+.primary-action span { font-size: 16px; line-height: 1; }
+.primary-action:hover { background: #b3f5dd; transform: translateY(-1px); }
+.primary-action:disabled { cursor: wait; opacity: .55; transform: none; }
+.workflow-strip { display: grid; grid-template-columns: minmax(190px, .7fr) minmax(0, 1.8fr); gap: 20px; margin-top: 15px; padding: 17px 20px; border: 1px solid #263e40; border-radius: 13px; background: rgba(13, 26, 28, .78); }
+.workflow-intro { display: grid; align-content: center; gap: 7px; padding-right: 12px; border-right: 1px solid #263e40; }
+.workflow-intro strong { color: #dcebe7; font-size: 13px; }
+.workflow-intro small { color: #78908d; font-size: 10px; line-height: 1.6; }
+.workflow-steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; padding: 0; margin: 0; list-style: none; }
+.workflow-steps li { position: relative; display: grid; grid-template-columns: 27px minmax(0, 1fr); gap: 8px; min-width: 0; padding: 3px 7px; }
+.workflow-steps li + li::before { position: absolute; top: 13px; left: -4px; width: 7px; height: 1px; content: ''; background: #355052; }
+.workflow-number { display: grid; place-items: center; width: 26px; height: 26px; border: 1px solid #3d5859; border-radius: 50%; color: #87a6a0; font: 10px 'DM Mono', monospace; }
+.workflow-steps li div { min-width: 0; }
+.workflow-steps strong { display: block; overflow: hidden; color: #a9bfba; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.workflow-steps small { display: block; overflow: hidden; margin-top: 4px; color: #637d79; font-size: 9px; line-height: 1.45; text-overflow: ellipsis; white-space: nowrap; }
+.workflow-status { grid-column: 2; color: #637d79; font: 8px 'DM Mono', monospace; }
+.workflow-steps li.done .workflow-number { border-color: #8debc9; color: #071313; background: #8debc9; }
+.workflow-steps li.done strong, .workflow-steps li.done .workflow-status { color: #8debc9; }
+.workflow-steps li.current .workflow-number { border-color: #8dbae9; color: #c9ddf3; box-shadow: 0 0 0 4px rgba(141, 186, 233, .08); }
+.workflow-steps li.current strong, .workflow-steps li.current .workflow-status { color: #c9ddf3; }
+.workflow-steps li.locked { opacity: .58; }
+.panel-helper { margin: 8px 0 0; color: #78908d; font-size: 10px; line-height: 1.6; }
+.section-helper { margin: 7px 0 0; color: #78908d; font-size: 11px; line-height: 1.6; }
+.gate-help { display: block; margin-top: 13px; color: #78908d; font-size: 10px; line-height: 1.6; }
+.card-description { min-height: 30px; margin: 4px 0 12px; color: #78908d; font-size: 10px; line-height: 1.5; }
+.quality-card:hover { border-color: #3f5b5c; background: #122123; transform: translateY(-2px); transition: .2s ease; }
+.quality-card:focus-within, .panel:focus-within { border-color: #4f706f; }
+.text-button:hover, .empty-link:hover { color: #c0f8e4; }
+.repository-panel, .panel, .release-gate { box-shadow: 0 14px 34px rgba(0, 0, 0, .08); }
+.release-flow-guide { margin-bottom: 15px; padding: 19px 22px; border: 1px solid #2c484a; border-radius: 13px; background: linear-gradient(105deg, rgba(19, 39, 41, .92), rgba(13, 26, 29, .88)); }
+.release-flow-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; }
+.release-flow-heading h2 { margin: 8px 0 0; font-size: 16px; }
+.release-flow-heading small { color: #78908d; font-size: 10px; }
+.release-flow-steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; padding: 0; margin: 20px 0 0; list-style: none; }
+.release-flow-steps li { position: relative; display: grid; grid-template-columns: 29px minmax(0, 1fr) auto; align-items: center; gap: 9px; min-width: 0; padding: 0 13px; }
+.release-flow-steps li:first-child { padding-left: 0; }
+.release-flow-steps li:last-child { padding-right: 0; }
+.release-flow-steps li:not(:last-child)::after { position: absolute; top: 14px; right: -2px; width: 15px; height: 1px; content: ''; background: #355052; }
+.release-flow-steps li > span { display: grid; place-items: center; width: 28px; height: 28px; border: 1px solid #3d5859; border-radius: 50%; color: #89a6a0; font: 10px 'DM Mono', monospace; }
+.release-flow-steps li > div { min-width: 0; }
+.release-flow-steps strong { display: block; color: #b6c9c4; font-size: 10px; }
+.release-flow-steps small { display: block; overflow: hidden; margin-top: 4px; color: #68827e; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.release-flow-steps b { color: #68827e; font: 8px 'DM Mono', monospace; white-space: nowrap; }
+.release-flow-steps li.done > span { border-color: #8debc9; color: #071313; background: #8debc9; }
+.release-flow-steps li.done strong, .release-flow-steps li.done b { color: #8debc9; }
+.release-flow-steps li.current > span { border-color: #8dbae9; color: #c9ddf3; box-shadow: 0 0 0 4px rgba(141, 186, 233, .08); }
+.release-flow-steps li.current strong, .release-flow-steps li.current b { color: #c9ddf3; }
+.release-flow-steps li.locked { opacity: .55; }
+.editor-hint { margin: 0 0 15px; padding: 10px 12px; border-left: 2px solid #4b6c6c; color: #78908d; background: rgba(32, 54, 55, .35); font-size: 10px; line-height: 1.65; }
+.editor-hint span { margin-right: 9px; color: #b8d1c9; font-weight: 700; }
+.version-field input::placeholder, .markdown-editor textarea::placeholder { color: #4f6967; }
+.editor-primary-button:hover:not(:disabled), .editor-secondary-button:hover:not(:disabled), .editor-ai-button:hover:not(:disabled) { transform: translateY(-1px); transition: .18s ease; }
+@media (max-width: 900px) { .workflow-strip { grid-template-columns: 1fr; }.workflow-intro { padding-right: 0; padding-bottom: 12px; border-right: 0; border-bottom: 1px solid #263e40; }.release-flow-steps { grid-template-columns: repeat(2, 1fr); gap: 17px 0; }.release-flow-steps li:nth-child(2)::after { display: none; }.release-flow-steps li:nth-child(3) { padding-left: 0; }.release-flow-steps li:nth-child(4) { padding-right: 0; } }
+@media (max-width: 680px) { .next-action-card { display: grid; gap: 18px; padding: 19px; }.next-action-cta { justify-items: stretch; }.primary-action { justify-content: center; }.workflow-steps { grid-template-columns: repeat(2, 1fr); gap: 15px 5px; }.workflow-steps li + li::before { display: none; }.workflow-steps li { padding: 0 3px; }.release-flow-guide { padding: 17px; }.release-flow-heading { display: grid; gap: 8px; }.release-flow-steps { grid-template-columns: 1fr; gap: 12px; }.release-flow-steps li, .release-flow-steps li:nth-child(3) { padding: 0; }.release-flow-steps li:not(:last-child)::after { top: auto; right: auto; bottom: -9px; left: 14px; width: 1px; height: 7px; }.release-flow-steps li:nth-child(2)::after { display: block; }.card-description { min-height: 0; } }
 </style>
