@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import {
   bindRepository,
   generateReleaseNoteDraft,
@@ -221,6 +221,27 @@ function handleNextAction() {
     activeView.value = 'releases'
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
+}
+
+function scrollToStepTarget(selector) {
+  nextTick(() => {
+    document.querySelector(selector)?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
+  })
+}
+
+function handleWorkflowStep(step) {
+  if (step.key === 'connect' || step.key === 'sync') {
+    if (step.key === 'sync' && boundRepository.value && syncStatus.value !== '正在同步…') {
+      loadQualityData()
+    }
+    document.getElementById('repository-panel')?.scrollIntoView?.({ behavior: 'smooth', block: 'center' })
+    return
+  }
+
+  activeView.value = 'releases'
+  scrollToStepTarget(step.key === 'draft'
+    ? '[data-testid="release-notes-editor"]'
+    : '[data-testid="release-checklist"]')
 }
 
 function applyReleaseNoteDraft(draft) {
@@ -468,7 +489,7 @@ onMounted(async () => {
       <section v-if="activeView === 'overview'" class="workflow-strip" data-testid="workflow-guide" aria-label="使用流程">
         <div class="workflow-intro"><span class="eyebrow">HOW TO USE</span><strong>四步完成一次发布检查</strong><small>先连接和同步，再生成说明，最后确认风险。</small></div>
         <ol class="workflow-steps">
-          <li v-for="step in workflowSteps" :key="step.key" :class="step.status">
+          <li v-for="step in workflowSteps" :key="step.key" :class="step.status" :data-testid="`workflow-step-${step.key}`" role="button" tabindex="0" @click="handleWorkflowStep(step)" @keydown.enter="handleWorkflowStep(step)" @keydown.space.prevent="handleWorkflowStep(step)">
             <span class="workflow-number">{{ step.number }}</span>
             <div><strong>{{ step.label }}</strong><small>{{ step.detail }}</small></div>
             <span class="workflow-status">{{ step.status === 'done' ? '完成' : step.status === 'current' ? '当前' : '待开始' }}</span>
@@ -561,7 +582,7 @@ onMounted(async () => {
         <section v-if="activeView === 'releases'" class="release-flow-guide" data-testid="release-flow-guide" aria-label="Release 质量使用步骤">
           <div class="release-flow-heading"><div><span class="eyebrow">RELEASE FLOW</span><h2>按顺序完成，不容易漏步骤</h2></div><small>草稿和建议都不会自动发布</small></div>
           <ol class="release-flow-steps">
-            <li v-for="step in releaseWorkflowSteps" :key="step.key" :class="step.status"><span>{{ step.number }}</span><div><strong>{{ step.label }}</strong><small>{{ step.detail }}</small></div><b>{{ step.status === 'done' ? '✓' : step.status === 'current' ? '进行中' : '待开始' }}</b></li>
+            <li v-for="step in releaseWorkflowSteps" :key="step.key" :class="step.status" :data-testid="`release-step-${step.key}`" role="button" tabindex="0" @click="handleWorkflowStep(step)" @keydown.enter="handleWorkflowStep(step)" @keydown.space.prevent="handleWorkflowStep(step)"><span>{{ step.number }}</span><div><strong>{{ step.label }}</strong><small>{{ step.detail }}</small></div><b>{{ step.status === 'done' ? '✓' : step.status === 'current' ? '进行中' : '待开始' }}</b></li>
           </ol>
         </section>
         <article v-if="activeView === 'releases'" class="panel release-checklist" :class="releaseReadiness?.status || 'loading'" data-testid="release-checklist">
@@ -1322,4 +1343,18 @@ body { font-size: 14px; line-height: 1.55; }
   .workflow-steps strong { font-size: 11px; }
   .workflow-steps small { font-size: 10px; }
 }
+.workflow-steps li, .release-flow-steps li {
+  cursor: pointer;
+  border-radius: 13px;
+  transition: background-color .18s ease, transform .18s ease;
+}
+.workflow-steps li:hover, .release-flow-steps li:hover {
+  background: rgba(227, 242, 255, .72);
+  transform: translateY(-1px);
+}
+.workflow-steps li:focus-visible, .release-flow-steps li:focus-visible {
+  outline: 3px solid rgba(0, 122, 255, .25);
+  outline-offset: 2px;
+}
+.workflow-steps li.locked, .release-flow-steps li.locked { cursor: pointer; }
 </style>

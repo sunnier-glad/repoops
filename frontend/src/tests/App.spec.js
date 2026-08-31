@@ -136,6 +136,24 @@ describe('RepoOps app shell', () => {
     expect(wrapper.text()).not.toContain('加载本地演示数据')
   })
 
+  it('navigates from workflow steps to the matching release section', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 401,
+      json: async () => ({ detail: '未登录' }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const wrapper = mount(App)
+    await flushPromises()
+
+    await wrapper.get('[data-testid="workflow-step-draft"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="detail-view"]').text()).toContain('发布说明草稿')
+    expect(wrapper.get('[data-testid="release-notes-editor"]').exists()).toBe(true)
+  })
+
   it('opens detail views from navigation and quality card actions', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ id: 1, github_login: 'sunnier-glad' }) })
