@@ -24,7 +24,7 @@ Release 质量页支持生成可审阅的 AI 润色建议：保留原始草稿�
 
 ## 运行方式
 
-复制 `.env.example` 为 `.env`，填入 GitHub OAuth、数据库密码和加密密钥后启动基础服务：
+复制 `.env.example` 为 `.env`，填入 GitHub OAuth、数据库密码和加密密钥后即可在本机启动，不需要服务器：
 
 ```powershell
 docker compose up -d --build
@@ -37,7 +37,7 @@ docker compose up -d --build
 npm run dev --prefix frontend
 ```
 
-默认前端地址是 `http://localhost:5174`，API 健康检查是 `/api/health`。API 容器启动时会执行 `alembic upgrade head`；生产环境应使用强密钥、PostgreSQL、Redis，并启用 `CELERY_ENABLED=true`。完整 Ubuntu 部署步骤见 [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)。
+默认前端地址是 `http://localhost:5174`，API 健康检查是 `/api/health`。本地真实数据验收将 `GITHUB_WEBHOOK_ENABLED` 设为 `false`，通过“同步仓库数据”读取 GitHub API；API 容器启动时会执行 `alembic upgrade head`。完整本地和 Ubuntu 部署步骤见 [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)。
 
 ## 质量保证
 

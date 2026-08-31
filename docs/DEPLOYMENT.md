@@ -1,9 +1,36 @@
 # Ubuntu 部署手册
 
-本文用于把 RepoOps 部署到一台 Ubuntu 服务器。当前项目没有域名，因此分为两种状态：
+本文同时覆盖本地无服务器运行和 Ubuntu 部署。当前没有域名，因此优先使用本地真实验收：
 
-- **服务器 IP 预览**：可以验证容器、数据库、前端和 API 的运行，但不开启公网 Webhook。
+- **本地无服务器模式（推荐当前使用）**：Docker Compose 在本机运行全部依赖，通过 GitHub API 手动同步真实数据。
+- **服务器 IP 预览**：可以验证远程容器、数据库、前端和 API 的运行，但不开启公网 Webhook。
 - **正式公网环境**：需要域名和 HTTPS，才能稳定使用 GitHub OAuth 回调和实时 Webhook。
+
+## 0. 本地无服务器模式
+
+不需要 Ubuntu、域名或公网 IP。准备 Docker Desktop 后，在项目根目录执行：
+
+```powershell
+Copy-Item .env.example .env
+docker compose up -d --build
+docker compose ps
+curl.exe -f http://127.0.0.1:8000/api/health
+curl.exe -f http://127.0.0.1:5174/api/health
+```
+
+`.env` 至少设置以下内容：
+
+```dotenv
+APP_ENV=development
+CELERY_ENABLED=true
+GITHUB_REDIRECT_URI=http://localhost:8000/api/auth/github/callback
+FRONTEND_URL=http://localhost:5174/
+GITHUB_WEBHOOK_ENABLED=false
+```
+
+浏览器打开 `http://localhost:5174/`，登录 GitHub、绑定验收仓库，然后点击“同步仓库数据”。该流程读取真实 PR、CI 和 Release，不需要服务器；GitHub 产生新事件后再次手动同步即可。
+
+本地模式的明确边界是：不接收实时 Webhook，不提供公网访问，不等同于线上部署。它足以完成项目功能验收、截图、录屏和简历展示。
 
 ## 1. 服务器准备
 
