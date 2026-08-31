@@ -1357,4 +1357,32 @@ body { font-size: 14px; line-height: 1.55; }
   outline-offset: 2px;
 }
 .workflow-steps li.locked, .release-flow-steps li.locked { cursor: pointer; }
+.app-shell { display: block; }
+.sidebar {
+  position: fixed;
+  inset: 0 auto 0 0;
+  height: 100vh;
+  min-height: 100vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.main-content {
+  width: calc(100% - 252px);
+  min-width: 0;
+  margin-left: 252px;
+}
+@media (max-width: 1080px) {
+  .main-content { width: calc(100% - 220px); margin-left: 220px; }
+}
+@media (max-width: 720px) {
+  .sidebar {
+    position: static;
+    inset: auto;
+    width: auto;
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+  }
+  .main-content { width: auto; margin-left: 0; }
+}
 </style>
