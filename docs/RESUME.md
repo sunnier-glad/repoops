@@ -21,4 +21,4 @@
 
 ## 面试真实性边界
 
-当前已验证：后端 `42 passed`、前端 `17 passed`、Ruff 全部通过、Alembic 可从空数据库升级到 `0008_release_checklists`、Vite production build 成功；RepoOps GitHub Actions CI 已通过。本地真实数据模式已验证 OAuth、仓库绑定和 GitHub API 同步，公网 HTTPS Webhook 与 Ubuntu 线上部署仍需单独验收。
+当前已验证：后端 `42 passed`、前端 `19 passed`、Ruff 全部通过、Alembic 可从空数据库升级到 `0008_release_checklists`、Vite production build 成功；RepoOps GitHub Actions CI 已通过。本地真实数据模式已验证 OAuth、仓库绑定、多个工作仓库切换和 GitHub API 同步，公网 HTTPS Webhook 与 Ubuntu 线上部署仍需单独验收。

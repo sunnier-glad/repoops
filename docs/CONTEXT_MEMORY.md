@@ -146,3 +146,19 @@
 2. 选择并绑定 `sunnier-glad/life-deadline-radar`，点击“同步仓库数据”。
 3. 若需要非零详情，先在该仓库产生真实 PR、Workflow Run、Release，再回到页面同步；创建外部资源前仍需用户明确确认。
 4. 保存页面截图和 GitHub 原始链接，补回 `docs/ACCEPTANCE.md`。
+
+## 2026-08-31 多仓库工作区切换
+
+- 用户确认增加多仓库查看能力。
+- 前端 `frontend/src/App.vue` 现在保存全部已绑定仓库，当前工作区通过下拉框切换；切换时清空旧仓库的 PR、CI、Release、质量门禁、Release Notes 和检查单状态，然后重新同步选中仓库，避免数据串仓。
+- 当前仓库面板增加“绑定新仓库”，会读取 GitHub 可访问列表并过滤已经绑定的仓库；新增仓库后加入切换列表，不删除已有仓库。
+- 增加异步请求序列保护，快速切换时旧仓库响应不会覆盖新仓库视图。
+- 新增两个前端回归场景：已绑定仓库切换、绑定第二个仓库；前端当前 `19 passed`，Vite production build 通过。
+- 本地 API/前端仍运行在 `http://localhost:8000` / `http://localhost:5174`；Docker Desktop Linux daemon 未启动，未重复尝试 Compose。
+
+### 当前下一步
+
+1. 刷新 `http://localhost:5174/`，在“当前工作仓库”下拉框切换已绑定仓库。
+2. 点击“绑定新仓库”后选择另一个 GitHub 仓库，绑定完成后可直接切换查看。
+3. 对每个仓库分别点击“同步仓库数据”；页面中的 PR、CI、Release 和发布检查均按当前仓库独立显示。
+4. 继续真实数据验收时，保留每个仓库的 GitHub 原始链接和 RepoOps 页面截图。

@@ -116,6 +116,80 @@ describe('RepoOps app shell', () => {
     expect(wrapper.text()).not.toContain('当前 GitHub 账号没有可绑定的仓库。')
   })
 
+  it('switches between bound repositories and reloads only the selected repository data', async () => {
+    const secondGate = { ...qualityGate, summary: '第二个仓库的发布风险' }
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ id: 1, github_login: 'sunnier-glad' }) })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => [
+        { id: 7, full_name: 'octocat/first', webhook_configured: false },
+        { id: 8, full_name: 'octocat/second', webhook_configured: false },
+      ] })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ pull_requests: 1, failed_workflows: 0, releases: 0 }) })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => [{ number: 1, title: 'First repository PR', state: 'open', html_url: 'https://example.test/pr/1' }] })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => [] })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => [] })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => qualityGate })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ pull_requests: 0, failed_workflows: 1, releases: 0 }) })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => [] })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => [{ workflow_name: 'Second CI', conclusion: 'failure', html_url: 'https://example.test/run/2' }] })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => [] })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => secondGate })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const wrapper = mount(App)
+    await flushPromises()
+
+    const switcher = wrapper.get('[data-testid="bound-repository-switcher"]')
+    expect(switcher.element.value).toBe('7')
+    expect(wrapper.text()).toContain('First repository PR')
+
+    await switcher.setValue('8')
+    await flushPromises()
+
+    expect(switcher.element.value).toBe('8')
+    expect(wrapper.text()).toContain('octocat/second')
+    expect(wrapper.text()).toContain('Second CI')
+    expect(wrapper.text()).not.toContain('First repository PR')
+    expect(fetchMock).toHaveBeenNthCalledWith(8, '/api/repositories/8/sync', expect.objectContaining({ method: 'POST' }))
+    expect(fetchMock).toHaveBeenCalledWith('/api/repositories/8/quality-gate', expect.objectContaining({ credentials: 'include' }))
+  })
+
+  it('opens the picker and binds an additional repository without losing the current list', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ id: 1, github_login: 'sunnier-glad' }) })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => [{ id: 7, full_name: 'octocat/first', webhook_configured: false }] })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ pull_requests: 0, failed_workflows: 0, releases: 0 }) })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => [] })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => [] })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => [] })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => qualityGate })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => [{ full_name: 'octocat/first', name: 'first', private: false }, { full_name: 'octocat/second', name: 'second', private: false }] })
+      .mockResolvedValueOnce({ ok: true, status: 201, json: async () => ({ id: 8, full_name: 'octocat/second', webhook_configured: false }) })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ pull_requests: 0, failed_workflows: 0, releases: 0 }) })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => [] })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => [] })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => [] })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => qualityGate })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const wrapper = mount(App)
+    await flushPromises()
+    await wrapper.get('[data-testid="bind-new-repository"]').trigger('click')
+    await flushPromises()
+
+    await wrapper.get('select[aria-label="选择 GitHub 仓库"]').setValue('octocat/second')
+    await wrapper.get('[data-testid="bind-repository"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="bound-repository-switcher"]').findAll('option')).toHaveLength(2)
+    expect(wrapper.get('[data-testid="bound-repository-switcher"]').element.value).toBe('8')
+    expect(wrapper.text()).toContain('仓库已绑定')
+    expect(fetchMock).toHaveBeenNthCalledWith(9, '/api/repositories', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ full_name: 'octocat/second' }),
+    }))
+  })
+
   it('keeps an empty real repository free of demo-data controls', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ id: 1, github_login: 'sunnier-glad' }) })

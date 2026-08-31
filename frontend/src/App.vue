@@ -23,8 +23,11 @@ const session = ref(null)
 const sessionLoading = ref(true)
 const activeView = ref('overview')
 const availableRepositories = ref([])
+const boundRepositories = ref([])
 const selectedRepository = ref('')
 const boundRepository = ref(null)
+const boundRepositoryId = ref('')
+const repositoryPickerOpen = ref(false)
 const repositoryLoading = ref(false)
 const repositoryBinding = ref(false)
 const repositoryError = ref('')
@@ -67,6 +70,11 @@ const hasReleaseDraft = computed(() => Boolean(
   releaseNoteDraft.value
   || qualityGate.value?.checks?.some(check => check.key === 'release_notes' && check.status === 'pass'),
 ))
+
+const bindableRepositories = computed(() => {
+  const boundNames = new Set(boundRepositories.value.map(repository => repository.full_name))
+  return availableRepositories.value.filter(repository => !boundNames.has(repository.full_name))
+})
 
 const workflowSteps = computed(() => {
   const syncDone = syncStatus.value === '同步完成'
@@ -160,13 +168,15 @@ const activities = computed(() => [
   })),
 ])
 
+let qualityLoadSequence = 0
+
 async function loadRepositories() {
   repositoryLoading.value = true
   repositoryError.value = ''
   try {
     availableRepositories.value = await getAvailableRepositories()
-    if (!selectedRepository.value && availableRepositories.value.length) {
-      selectedRepository.value = availableRepositories.value[0].full_name
+    if (!bindableRepositories.value.some(repository => repository.full_name === selectedRepository.value)) {
+      selectedRepository.value = bindableRepositories.value[0]?.full_name || ''
     }
   } catch (error) {
     repositoryError.value = error.message
@@ -175,12 +185,47 @@ async function loadRepositories() {
   }
 }
 
+async function toggleRepositoryPicker() {
+  repositoryPickerOpen.value = !repositoryPickerOpen.value
+  if (repositoryPickerOpen.value) await loadRepositories()
+}
+
+function resetRepositoryData() {
+  qualityLoadSequence += 1
+  pullRequests.value = []
+  failedWorkflows.value = []
+  releases.value = []
+  qualityGate.value = null
+  releaseNoteDraft.value = null
+  releaseVersion.value = 'v0.1.0'
+  releaseContent.value = ''
+  releaseReadiness.value = null
+  releasePolishSuggestion.value = null
+  syncStatus.value = ''
+  syncError.value = ''
+  releaseDraftStatus.value = ''
+  releaseDraftError.value = ''
+  releaseChecklistStatus.value = ''
+  releaseChecklistError.value = ''
+  releasePolishStatus.value = ''
+  releasePolishError.value = ''
+}
+
+function setBoundRepository(repository) {
+  boundRepository.value = repository
+  boundRepositoryId.value = repository?.id ?? ''
+  resetRepositoryData()
+}
+
 async function handleBindRepository() {
   if (!selectedRepository.value) return
   repositoryBinding.value = true
   repositoryError.value = ''
   try {
-    boundRepository.value = await bindRepository(selectedRepository.value)
+    const repository = await bindRepository(selectedRepository.value)
+    boundRepositories.value = [...boundRepositories.value, repository]
+    setBoundRepository(repository)
+    repositoryPickerOpen.value = false
     await loadQualityData()
   } catch (error) {
     repositoryError.value = error.message
@@ -189,24 +234,36 @@ async function handleBindRepository() {
   }
 }
 
+async function handleRepositorySwitch() {
+  const repository = boundRepositories.value.find(item => String(item.id) === String(boundRepositoryId.value))
+  if (!repository || repository.id === boundRepository.value?.id) return
+  setBoundRepository(repository)
+  await loadQualityData()
+  if (activeView.value === 'releases') await loadReleaseWorkspace()
+}
+
 async function loadQualityData() {
   if (!boundRepository.value) return
+  const repositoryId = boundRepository.value.id
+  const sequence = ++qualityLoadSequence
   syncStatus.value = '正在同步…'
   syncError.value = ''
   try {
-    await syncRepository(boundRepository.value.id)
+    await syncRepository(repositoryId)
     const [pullRequestData, workflowData, releaseData, qualityGateData] = await Promise.all([
-      getPullRequests(boundRepository.value.id),
-      getFailedWorkflows(boundRepository.value.id),
-      getReleases(boundRepository.value.id),
-      getQualityGate(boundRepository.value.id),
+      getPullRequests(repositoryId),
+      getFailedWorkflows(repositoryId),
+      getReleases(repositoryId),
+      getQualityGate(repositoryId),
     ])
+    if (sequence !== qualityLoadSequence || boundRepository.value?.id !== repositoryId) return
     pullRequests.value = pullRequestData
     failedWorkflows.value = workflowData
     releases.value = releaseData
     qualityGate.value = qualityGateData
     syncStatus.value = '同步完成'
   } catch (error) {
+    if (sequence !== qualityLoadSequence || boundRepository.value?.id !== repositoryId) return
     syncStatus.value = '同步失败'
     syncError.value = error.message
   }
@@ -416,9 +473,9 @@ onMounted(async () => {
   }
   try {
     session.value = await getSession()
-    const boundRepositories = await getBoundRepositories()
-    if (boundRepositories.length) {
-      boundRepository.value = boundRepositories[0]
+    boundRepositories.value = await getBoundRepositories()
+    if (boundRepositories.value.length) {
+      setBoundRepository(boundRepositories.value[0])
       await loadQualityData()
     } else {
       await loadRepositories()
@@ -498,19 +555,25 @@ onMounted(async () => {
       </section>
 
       <section v-if="session" id="repository-panel" class="repository-panel" aria-label="仓库接入">
-        <div class="panel-heading"><div><span class="eyebrow">REPOSITORY ACCESS</span><h2>{{ boundRepository ? '当前工作仓库' : '选择工作仓库' }}</h2><p class="panel-helper">{{ boundRepository ? '已连接真实 GitHub 数据，点击同步可刷新 PR、CI 和版本记录。' : '只会显示当前 GitHub 账号有权限访问的仓库。' }}</p></div><span v-if="boundRepository" class="repository-status">已连接</span></div>
+        <div class="panel-heading"><div><span class="eyebrow">REPOSITORY ACCESS</span><h2>{{ boundRepository ? '当前工作仓库' : '选择工作仓库' }}</h2><p class="panel-helper">{{ boundRepository ? '切换仓库可查看独立的 PR、CI、Release 和发布检查。' : '只会显示当前 GitHub 账号有权限访问的仓库。' }}</p></div><span v-if="boundRepository" class="repository-status">已连接 {{ boundRepositories.length }} 个</span></div>
         <div v-if="boundRepository" class="repository-bound-state">
-          <strong>{{ boundRepository.full_name }}</strong>
-          <span>{{ boundRepository.webhook_configured ? 'Webhook 已配置' : 'Webhook 配置待完成' }}</span>
+          <label class="repository-selection">
+            <span>当前查看仓库</span>
+            <select v-model="boundRepositoryId" data-testid="bound-repository-switcher" aria-label="切换已绑定仓库" :disabled="syncStatus === '正在同步…'" @change="handleRepositorySwitch">
+              <option v-for="repository in boundRepositories" :key="repository.id" :value="repository.id">{{ repository.full_name }}</option>
+            </select>
+            <small>{{ boundRepository.webhook_configured ? 'Webhook 已配置' : '本地模式：通过同步按钮获取 GitHub 数据' }}</small>
+          </label>
+          <button class="text-button repository-switch-button" data-testid="bind-new-repository" type="button" @click="toggleRepositoryPicker">{{ repositoryPickerOpen ? '收起绑定面板' : '绑定新仓库' }}</button>
         </div>
         <div v-if="boundRepository" class="sync-toolbar">
           <span data-testid="sync-status">{{ syncStatus || '尚未同步' }}</span>
           <button class="text-button" type="button" :disabled="syncStatus === '正在同步…'" @click="loadQualityData">同步仓库数据 ↻</button>
         </div>
-        <div v-else class="repository-picker">
-          <select v-model="selectedRepository" aria-label="选择 GitHub 仓库" :disabled="repositoryLoading || !availableRepositories.length">
-            <option value="" disabled>{{ repositoryLoading ? '正在加载仓库…' : '请选择一个仓库' }}</option>
-            <option v-for="repository in availableRepositories" :key="repository.full_name" :value="repository.full_name">
+        <div v-if="repositoryPickerOpen || !boundRepository" class="repository-picker">
+          <select v-model="selectedRepository" aria-label="选择 GitHub 仓库" :disabled="repositoryLoading || !bindableRepositories.length">
+            <option value="" disabled>{{ repositoryLoading ? '正在加载仓库…' : bindableRepositories.length ? '请选择一个未绑定仓库' : '没有新的可绑定仓库' }}</option>
+            <option v-for="repository in bindableRepositories" :key="repository.full_name" :value="repository.full_name">
               {{ repository.full_name }}{{ repository.private ? ' · Private' : '' }}
             </option>
           </select>
@@ -518,9 +581,9 @@ onMounted(async () => {
             {{ repositoryBinding ? '绑定中…' : '绑定仓库' }}
           </button>
         </div>
-        <p v-if="!boundRepository && !repositoryLoading && !availableRepositories.length && !repositoryError" class="repository-hint">当前 GitHub 账号没有可绑定的仓库。</p>
+        <p v-if="(repositoryPickerOpen || !boundRepository) && !repositoryLoading && !bindableRepositories.length && !repositoryError" class="repository-hint">当前 GitHub 账号没有尚未绑定的仓库。</p>
         <p v-if="repositoryError" class="repository-error" role="alert">{{ repositoryError }}</p>
-        <button v-if="!boundRepository" class="text-button repository-refresh" type="button" @click="loadRepositories">重新加载仓库 ↻</button>
+        <button v-if="repositoryPickerOpen || !boundRepository" class="text-button repository-refresh" type="button" @click="loadRepositories">重新加载仓库 ↻</button>
       </section>
 
       <template v-if="activeView === 'overview'">
@@ -1025,9 +1088,13 @@ h2 { color: #1a3451; font-size: 20px; font-weight: 720; letter-spacing: -.04em; 
 .panel-heading h2 { color: #1b3652; }
 .panel-helper, .section-helper, .detail-heading p, .gate-help { color: var(--ios-muted); }
 .repository-status { color: #279a51; font-family: inherit; font-size: 11px; font-weight: 700; }
-.repository-bound-state { gap: 14px; padding: 16px 0 0; }
-.repository-bound-state strong { color: #224361; font-size: 14px; }
-.repository-bound-state span { color: #6e89a4; font-size: 11px; }
+.repository-bound-state { gap: 14px; padding: 16px 0 0; align-items: flex-end; }
+.repository-selection { display: grid; flex: 1; min-width: 0; gap: 6px; }
+.repository-selection > span { color: #6e89a4; font-size: 11px; }
+.repository-selection select { width: min(100%, 620px); padding: 13px 14px; border: 1px solid #cfe0ef; border-radius: 13px; color: #244461; background: rgba(255, 255, 255, .92); box-shadow: inset 0 1px 2px rgba(36, 75, 112, .03); font-weight: 650; }
+.repository-selection select:focus, .repository-picker select:focus { outline: 3px solid rgba(0, 122, 255, .16); outline-offset: 1px; }
+.repository-selection small { color: #6e89a4; font-size: 11px; }
+.repository-switch-button { flex: 0 0 auto; padding: 0 0 3px; white-space: nowrap; }
 .sync-toolbar { margin-top: 16px; padding-top: 14px; border-top-color: #e3edf6; }
 .sync-toolbar > span { color: #6e89a4; font-size: 11px; }
 .text-button, .empty-link, .card-action { color: var(--ios-blue); font-weight: 650; }
@@ -1384,5 +1451,10 @@ body { font-size: 14px; line-height: 1.55; }
     overflow: visible;
   }
   .main-content { width: auto; margin-left: 0; }
+}
+@media (max-width: 680px) {
+  .repository-bound-state { align-items: stretch; }
+  .repository-selection select { width: 100%; }
+  .repository-switch-button { padding: 0; text-align: left; }
 }
 </style>
