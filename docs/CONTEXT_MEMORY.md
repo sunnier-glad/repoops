@@ -128,3 +128,21 @@
 2. 单独确认是否允许在 `life-deadline-radar` 创建无业务影响的真实验收 PR、Workflow Run 和 Release；未经确认不创建外部资源。
 3. 获取 Ubuntu 服务器地址和 SSH 登录方式（不要在聊天中发送密码或密钥），按 `docs/DEPLOYMENT.md` 完成部署与健康检查。
 4. 将真实验收链接、数量变化、截图和线上检查结果补回 `docs/ACCEPTANCE.md`，再更新简历口径。
+
+## 2026-08-31 无服务器本地验收决策
+
+- 用户确认不使用 Ubuntu 服务器，改为本地真实数据验收；服务器部署不再是当前完成条件。
+- 已更新并推送提交 `5fefff3 docs: document local real-data acceptance`：
+  - `docs/DEPLOYMENT.md` 增加“本地无服务器模式”，说明 Docker Compose、本地 OAuth、手动同步和 Webhook 边界。
+  - `docs/ACCEPTANCE.md` 明确本地模式无需服务器，可验收 GitHub API 真实 PR/CI/Release 数据。
+  - `README.md` 将本地无服务器运行作为默认入口。
+- Docker Desktop 的 Linux daemon 当前未启动，`docker compose up -d` 失败于找不到 `dockerDesktopLinuxEngine`；没有重复重试或修改 Docker 设置。
+- 已使用项目已有 `.venv` + SQLite + Vite 启动本地 API/前端：`http://127.0.0.1:8000/api/health`、`http://127.0.0.1:5174/`、前端 `/api/health` 均返回 200；未登录 `/api/auth/me` 返回 401，OAuth 入口返回 307。
+- 本地 API 使用临时进程环境覆盖 SQLite 和 `CELERY_ENABLED=false`，未修改或输出用户 `.env`。
+
+### 当前下一步
+
+1. 用户浏览器打开 `http://localhost:5174/`，完成 GitHub OAuth。
+2. 选择并绑定 `sunnier-glad/life-deadline-radar`，点击“同步仓库数据”。
+3. 若需要非零详情，先在该仓库产生真实 PR、Workflow Run、Release，再回到页面同步；创建外部资源前仍需用户明确确认。
+4. 保存页面截图和 GitHub 原始链接，补回 `docs/ACCEPTANCE.md`。
